@@ -1,32 +1,101 @@
 # AI Lambda Forger
 
-Frontend-first tool to deploy context-aware OpenAI Lambda endpoints quickly.
+Deploy context-aware chatbot Lambda endpoints from a frontend workflow.
 
-## Status
-- MVP v1: completed.
-- MVP v2: implemented and validated (multi-file deploy, system prompt env wiring, template roadmap affordance, real AWS/OpenAI E2E).
+## Current Scope (MVP v2)
+- Multi-file Lambda deploy (`files[]` + `entryFile`).
+- System prompt configured in UI and injected as `SYSTEM_PROMPT`.
+- Context file upload to S3 (`S3_CONTEXT_FILES` env var on deployed Lambda).
+- Template selector UI with `chatCompletion` as the only enabled backend template.
 
-## Canonical Docs
-- `README.md`: runbook
-- `AGENTS.md`: scope + execution rules
-- `PLAN.md`: active checklist
-- `DECISIONS.md`: active decisions/blockers
-- `DECISIONS_ARCHIVE.md`: historical decisions/blockers
+Out of scope for v2: streaming execution, image generation execution, auth, billing, history/log UI.
 
-## Current Stack
-- Frontend: Next.js + TypeScript + Tailwind + shadcn/ui + Monaco + MSW
-- Backend: AWS SAM Lambda (Node.js 22)
-- APIs: `GET /health`, `POST /upload`, `POST /deploy`
-- Deploy target: AWS Lambda Function URL
+## Architecture
+- `frontend/`: Next.js app (App Router, TS, Tailwind, Monaco editor).
+- `backend/`: AWS SAM app exposing a control-plane HTTP API:
+  - `GET /health`
+  - `POST /upload`
+  - `POST /deploy`
+- Deployed user runtimes are AWS Lambda functions invoked via **Lambda Function URLs**.
+- Backend control plane itself runs behind **API Gateway HTTP API**.
 
-## MVP v2 Delivered
-1. Multi-file deploy contract (`files[]`, `entryFile`) with strict backend validation.
-2. Legacy v1 `code` deploy payload removed with clear `400` migration error.
-3. System prompt field in UI, passed in deploy payload, injected as Lambda env var `SYSTEM_PROMPT`.
-4. Template selector UI with `Chat Completion` enabled and disabled roadmap options labeled `Coming soon`.
-5. Real AWS upload/deploy/invoke validation using runtime `OPENAI_API_KEY`, with cleanup.
+## Prerequisites
+- Node.js 22+
+- npm
+- AWS CLI configured with credentials
+- AWS SAM CLI
+- Vercel CLI (for frontend hosting)
 
-## Deploy Contract (v2)
+## Local Development
+
+### 1. Backend (SAM local)
+```bash
+cd backend
+npm install
+cp .env.example .env
+npm run typecheck
+npm run build
+npm run sam:validate
+npm run sam:build
+npm run sam:local
+```
+
+Default local backend URL: `http://127.0.0.1:3000`
+
+### 2. Frontend
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local
+npm run dev -- --port 3001
+```
+
+Frontend runs on: `http://127.0.0.1:3001`
+
+## Deploy Backend to AWS (eu-central-1)
+```bash
+cd backend
+npm install
+sam build
+sam deploy \
+  --stack-name ai-lambda-forger-backend \
+  --region eu-central-1 \
+  --capabilities CAPABILITY_IAM \
+  --resolve-s3 \
+  --no-confirm-changeset \
+  --no-fail-on-empty-changeset \
+  --parameter-overrides DeployTargetRegion=eu-central-1
+```
+
+Get deployed API URL:
+```bash
+aws cloudformation describe-stacks \
+  --region eu-central-1 \
+  --stack-name ai-lambda-forger-backend \
+  --query "Stacks[0].Outputs[?OutputKey=='BackendApiUrl'].OutputValue" \
+  --output text
+```
+
+Quick health check:
+```bash
+curl https://<backend-api-id>.execute-api.eu-central-1.amazonaws.com/health
+```
+
+## Deploy Frontend to Vercel (wired to backend)
+Set the backend URL in Vercel deployment env:
+
+```bash
+cd frontend
+vercel deploy --prod --yes \
+  --build-env NEXT_PUBLIC_BACKEND_BASE_URL=https://<backend-api-id>.execute-api.eu-central-1.amazonaws.com \
+  --build-env NEXT_PUBLIC_USE_MOCKS=false \
+  --env NEXT_PUBLIC_BACKEND_BASE_URL=https://<backend-api-id>.execute-api.eu-central-1.amazonaws.com \
+  --env NEXT_PUBLIC_USE_MOCKS=false
+```
+
+For persistent project env vars (recommended), configure them in Vercel project settings after first link/deploy.
+
+## Deploy API Contract (v2)
 ```json
 {
   "template": "chatCompletion",
@@ -41,68 +110,26 @@ Frontend-first tool to deploy context-aware OpenAI Lambda endpoints quickly.
 }
 ```
 
-Notes:
-- Backend accepts only `template: "chatCompletion"` in v2.
-- `files[].path` must be relative and use `.ts`, `.js`, `.mjs`, `.cjs`, `.mts`, or `.cts`.
-- Legacy v1 `code` payload is rejected with actionable migration error (`400`).
+Validation rules:
+- `template` must be exactly `"chatCompletion"`.
+- Legacy v1 `code` payload is rejected with `400`.
+- `files[].path` must be a safe relative path with one of:
+  - `.ts`, `.js`, `.mjs`, `.cjs`, `.mts`, `.cts`
+- `entryFile` must match one of the provided file paths.
 
-## Backend Runbook
-```bash
-cd backend
-npm install
-npm run typecheck
-npm run build
-sam validate --lint --template-file template.yaml
-sam build
-sam local start-api
-```
+## Environment Variables
 
-Deploy backend:
-```bash
-cd backend
-sam deploy --guided
-```
-
-## Frontend Runbook
-```bash
-cd frontend
-npm install
-cp .env.local.example .env.local
-npm run dev -- --port 3001
-```
-
-Mock mode:
-```bash
-cd frontend
-cat > .env.local <<'EOF2'
-NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:3000
-NEXT_PUBLIC_USE_MOCKS=true
-EOF2
-npm run dev -- --port 3001
-```
-
-## Environment
 Backend (`backend/.env.example`):
-- `AWS_ACCESS_KEY_ID` (optional if already configured via AWS credential chain)
-- `AWS_SECRET_ACCESS_KEY` (optional if already configured via AWS credential chain)
-- `AWS_REGION`
-- `DEPLOY_TARGET_REGION`
+- `AWS_REGION` (default `eu-central-1`)
+- `DEPLOY_TARGET_REGION` (default `eu-central-1`)
 - `MVP_LAMBDA_ROLE_ARN` (optional override)
 - `MVP_LAMBDA_ROLE_NAME`
 - `S3_CONTEXT_BUCKET`
 
-Frontend (`frontend/.env.local.example`):
+Frontend:
 - `NEXT_PUBLIC_BACKEND_BASE_URL`
 - `NEXT_PUBLIC_USE_MOCKS`
 
-E2E testing secret (local shell/runtime only):
-- `OPENAI_API_KEY`
-
-## Security
-- Never commit API keys or cloud credentials.
-- For real E2E testing, inject OpenAI key at runtime only (use local `OPENAI_API_KEY`).
-- Redact secrets from logs and docs.
-
-## Notes
-- Root README is canonical; `frontend/README.md` is intentionally removed.
-- Historical `builder` naming may exist in archived logs/resources; active defaults use `forger` naming.
+## Security Notes
+- Never commit secrets (`.env`, API keys, cloud credentials).
+- Use runtime/local environment injection for real OpenAI key usage.
