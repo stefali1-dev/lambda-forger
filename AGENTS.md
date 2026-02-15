@@ -2,7 +2,7 @@
 
 **Project:** AI Lambda Forger MVP  
 **Current Date Context:** 2026-02-15  
-**Status:** MVP v1 complete; shipping MVP v2 iteration
+**Status:** MVP v2 implemented and validated
 
 ## Product Positioning (Canonical)
 - Audience: frontend developers who want chatbot endpoints without backend/AWS setup overhead.
@@ -13,46 +13,48 @@
   - Prefer "context-aware chatbot API" wording.
   - Do not position streaming/image generation as current MVP capability.
 
-## Current Architecture (v1)
+## Current Architecture (v2)
 - Frontend: Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + Monaco + MSW.
 - Backend control plane: AWS SAM Lambda (`backend/src/handler.ts`) with routes:
   - `GET /health`
   - `POST /upload`
   - `POST /deploy`
 - Deploy flow provisions user Lambdas with Function URLs (public invoke permissions added).
+- Deploy contract uses `files[]` + `entryFile` (v1 `code` removed and rejected with migration `400`).
 - Context files stored in S3 and passed through `S3_CONTEXT_FILES` env var.
+- System prompt is passed in deploy payload and injected via `SYSTEM_PROMPT` env var.
+- Backend validation is strict for file content/path safety, duplicate paths, entry resolution, and template (`chatCompletion` only).
 
-## MVP v2 Scope (Now Active)
+## MVP v2 Delivered
 
-### 1) Full Multi-file Lambda Deploy Support (Must Have)
-Frontend already supports multi-file editing UX. Backend and API contract must now support it end-to-end.
+### 1) Full Multi-file Lambda Deploy Support
+Frontend and backend support multi-file deploy end-to-end.
 
-Target behavior:
+Implemented behavior:
 - Deploy payload supports multiple code files plus explicit entry file.
-- Legacy v1 payload (`code`) is unsupported in v2 and must return a clear client error.
+- Legacy v1 payload (`code`) is unsupported and returns a clear migration client error.
 - Backend writes all files into build workspace before zipping.
 - Entry file resolves deterministic handler target (for example `handler.ts` -> compiled/packaged handler mapping).
 - Validation errors are user-facing and specific (missing entry file, duplicate paths, invalid extensions).
 
-### 2) System Prompt as First-class UI Field (Must Have)
-- Add a system prompt input on frontend (clear, visible, editable).
-- Deployed code must read system prompt from env var (for example `SYSTEM_PROMPT`) rather than hardcoded template text.
+### 2) System Prompt as First-class UI Field
+- System prompt input exists in frontend deploy controls (clear, visible, editable).
+- Deployed runtime reads system prompt from env var (`SYSTEM_PROMPT`) with fallback behavior.
 - Deploy request includes system prompt value; backend sets env var for deployed Lambda.
 
-### 3) Template Roadmap Affordance in UI (Must Have)
-v2 still ships chat-only, but UI should signal future template expansion.
+### 3) Template Roadmap Affordance in UI
+v2 ships chat-only, with clear roadmap affordance.
 
-Recommended approach:
+Implemented UI behavior:
 - Add a template selector control with one enabled option (`Chat Completion`) and disabled future options (`Image Generation`, `Streaming Chat`) labeled `Coming soon`.
 - Add helper copy under selector: `More templates are planned in upcoming releases.`
-- Keep backend validation strict to `chatCompletion` for v2.
+- Backend validation remains strict to `chatCompletion`.
 
-### 4) Intensive Real End-to-End Validation with Real User Key (Must Have)
+### 4) Intensive Real End-to-End Validation with Real User Key
 - Run true E2E flow with real AWS and real OpenAI call path.
 - Use the user-provided OpenAI key only from local runtime context; never commit secrets to files, logs, or docs.
 - Test with realistic code snippets and context files.
-- Fix discovered bugs before closing v2.
-- Document findings and fixes in `PLAN.md` and `DECISIONS.md`.
+- Findings and fixes documented in `PLAN.md` and `DECISIONS.md`.
 
 ## Out of Scope (Still Deferred)
 - Auth/accounts/teams.
@@ -64,7 +66,7 @@ Recommended approach:
 
 ## API Contract Snapshot
 
-v2 target deploy payload (planned):
+Current v2 deploy payload:
 ```json
 {
   "template": "chatCompletion",
@@ -124,7 +126,7 @@ Suggested size targets:
 - If blocked by product ambiguity, ask one direct question with recommendation.
 - Keep SAM infra and backend runtime behavior aligned.
 
-## Definition of Done (MVP v2)
+## MVP v2 Release Status
 - Multi-file deploy contract implemented and validated end-to-end.
 - System prompt field wired from UI -> deploy API -> Lambda env -> runtime behavior.
 - Template roadmap affordance visible in UI, with only chat enabled.
@@ -132,4 +134,8 @@ Suggested size targets:
 - Test findings documented clearly.
 - Primary docs pruned, current, and consistent.
 
-**Last Updated:** 2026-02-15 23:40 EET
+## Current Focus After v2
+- Keep docs and runbook aligned with implementation.
+- Address post-v2 hardening items when prioritized (for example IAM least-privilege tightening).
+
+**Last Updated:** 2026-02-15

@@ -778,10 +778,10 @@ export default function Home() {
             </Alert>
           ) : null}
 
-          <section className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="space-y-4">{renderDeploymentControls(false)}</div>
+          <section className="grid gap-6 lg:h-[calc(100dvh-16rem)] lg:min-h-[620px] lg:grid-cols-[360px_minmax(0,1fr)] lg:overflow-hidden">
+            <div className="space-y-4 lg:h-full lg:overflow-y-auto lg:pr-1">{renderDeploymentControls(false)}</div>
 
-            <Card className="overflow-hidden border-border/70 bg-card/80">
+            <Card className="flex min-h-0 flex-col gap-0 overflow-hidden border-border/70 bg-card/80 py-0 lg:h-full">
               <CardHeader className="border-b border-border/70 pb-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -822,8 +822,8 @@ export default function Home() {
                   })}
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
-                <Editor value={activeFile?.content ?? ""} onChange={updateActiveFileContent} />
+              <CardContent className="flex-1 min-h-0 p-0">
+                <Editor value={activeFile?.content ?? ""} onChange={updateActiveFileContent} height="100%" />
               </CardContent>
             </Card>
           </section>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CheckCircle2, Copy, Loader2, Rocket, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +34,8 @@ export function DeployPanel({
   onDeploy,
   workspace = false,
 }: DeployPanelProps) {
+  const [showResultDetails, setShowResultDetails] = useState(false);
+
   const baseCardClass = workspace
     ? "border-slate-700 bg-slate-900/90 text-slate-100"
     : "border-border/70 bg-card/70";
@@ -75,10 +78,20 @@ export function DeployPanel({
       {result ? (
         <Card className={resultCardClass}>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <CheckCircle2 className="size-4 text-emerald-500" />
-              Deployment Ready
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                <CheckCircle2 className="size-4 text-emerald-500" />
+                Deployment Ready
+              </CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowResultDetails((value) => !value)}
+                className={workspace ? "border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800" : undefined}
+              >
+                {showResultDetails ? "Hide details" : "Show details"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
@@ -100,23 +113,25 @@ export function DeployPanel({
               </div>
             </div>
 
-            <div className="space-y-1">
-              <p className={`text-xs uppercase tracking-wide ${mutedTextClass}`}>cURL</p>
-              <div className="flex gap-2">
-                <code
-                  className={
-                    workspace
-                      ? "block flex-1 overflow-x-auto rounded-md border border-slate-700 bg-slate-950/90 px-2 py-1 text-xs text-slate-100"
-                      : "block flex-1 overflow-x-auto rounded-md border border-border/60 bg-background/80 px-2 py-1 text-xs"
-                  }
-                >
-                  {result.curlExample}
-                </code>
-                <Button size="icon-sm" variant="outline" onClick={() => copyText(result.curlExample, "cURL command")}>
-                  <Copy className="size-4" />
-                </Button>
+            {showResultDetails ? (
+              <div className="space-y-1">
+                <p className={`text-xs uppercase tracking-wide ${mutedTextClass}`}>cURL</p>
+                <div className="flex gap-2">
+                  <code
+                    className={
+                      workspace
+                        ? "block flex-1 overflow-x-auto rounded-md border border-slate-700 bg-slate-950/90 px-2 py-1 text-xs text-slate-100"
+                        : "block flex-1 overflow-x-auto rounded-md border border-border/60 bg-background/80 px-2 py-1 text-xs"
+                    }
+                  >
+                    {result.curlExample}
+                  </code>
+                  <Button size="icon-sm" variant="outline" onClick={() => copyText(result.curlExample, "cURL command")}>
+                    <Copy className="size-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

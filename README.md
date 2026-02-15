@@ -83,6 +83,8 @@ npm run dev -- --port 3001
 
 ## Environment
 Backend (`backend/.env.example`):
+- `AWS_ACCESS_KEY_ID` (optional if already configured via AWS credential chain)
+- `AWS_SECRET_ACCESS_KEY` (optional if already configured via AWS credential chain)
 - `AWS_REGION`
 - `DEPLOY_TARGET_REGION`
 - `MVP_LAMBDA_ROLE_ARN` (optional override)
