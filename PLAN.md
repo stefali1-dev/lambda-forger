@@ -1,92 +1,90 @@
 # PLAN.md - AI Lambda Forger MVP v2
 
-**Status:** MVP v1 complete, MVP v2 in progress  
-**Last Updated:** 2026-02-15 23:40 EET
+**Status:** MVP v2 implemented and validated  
+**Last Updated:** 2026-02-15
 
 ## Purpose
-Track only active execution work for the current iteration. Historical execution details live in `DECISIONS_ARCHIVE.md`.
+Track active iteration execution and release-gate validation evidence.
 
-## MVP v1 Completion Snapshot
-- Chat-only deploy flow implemented (`/health`, `/upload`, `/deploy`).
-- Frontend Monaco editor + workspace mode implemented.
-- Context upload and deploy result UX implemented.
-- SAM-based backend flow validated previously.
-
-## MVP v2 Goals (Active)
-1. Full multi-file deploy support across frontend contract and backend packaging.
-2. System prompt configurable from UI, passed as deploy input, and injected via Lambda env var.
-3. Template roadmap affordance in UI (chat enabled, future templates visible as disabled/coming soon).
-4. Intensive real E2E validation with real AWS + OpenAI path, followed by bug fixes.
+## MVP v2 Goals
+1. Multi-file deploy contract and packaging parity.
+2. System prompt UI -> deploy payload -> Lambda env var wiring.
+3. Template roadmap affordance in UI (chat enabled, future templates disabled).
+4. Real AWS/OpenAI end-to-end validation with fixes.
 
 ## Execution Checklist
 
 ### Phase A: Contract + Backend Multi-file
-- [ ] Define v2 deploy request schema:
-  - `files: Array<{ path: string; content: string }>`
-  - `entryFile: string`
-  - `systemPrompt?: string`
-  - keep `template`, `openaiKey`, `s3ContextFiles`
-- [ ] Remove v1 `code` payload support and return clear `400` migration error when used.
-- [ ] Backend validation for:
-  - missing/empty files
-  - duplicate paths
-  - invalid or unsafe paths (`..`, absolute paths)
-  - missing/invalid `entryFile`
-- [ ] Backend packaging writes full file tree before zip.
-- [ ] Handler resolution for chosen entry file is deterministic and documented.
-- [ ] Update backend error responses to be explicit for multi-file issues.
+- [x] Define v2 deploy request schema (`files[]`, `entryFile`, `systemPrompt`, `template`, `openaiKey`, `s3ContextFiles`).
+- [x] Remove v1 `code` payload support with migration `400`.
+- [x] Add backend validation for missing/empty files, duplicate paths, unsafe paths, invalid extensions, missing `entryFile`.
+- [x] Write full file tree into packaging workspace before zip.
+- [x] Resolve deterministic handler target from explicit `entryFile` by bundling to `handler.mjs` + Lambda handler `handler.handler`.
+- [x] Return explicit user-facing validation messages for multi-file issues.
 
 ### Phase B: System Prompt UX + Runtime Wiring
-- [ ] Add visible system prompt field in frontend deploy controls.
-- [ ] Include system prompt in deploy payload.
-- [ ] Backend injects `SYSTEM_PROMPT` env var for deployed Lambda.
-- [ ] Chat template reads `process.env.SYSTEM_PROMPT` and uses fallback only if empty.
-- [ ] Ensure UI communicates that system prompt is runtime-configured, not hardcoded.
+- [x] Add visible system prompt field in frontend deploy controls.
+- [x] Include `systemPrompt` in deploy payload.
+- [x] Inject `SYSTEM_PROMPT` env var in deployed Lambda.
+- [x] Update default chat template to read `process.env.SYSTEM_PROMPT` with fallback.
+- [x] Add UI copy clarifying system prompt is runtime-configured.
 
 ### Phase C: Template Roadmap Affordance
-- [ ] Add template selector UI affordance (interactive control).
-- [ ] Chat Completion is the only enabled option in v2.
-- [ ] Future options shown as disabled with `Coming soon` label.
-- [ ] Add helper copy under selector: `More templates are planned in upcoming releases.`
-- [ ] Keep backend contract strict to `chatCompletion` for now.
+- [x] Add template selector control.
+- [x] Keep `Chat Completion` as the only enabled option.
+- [x] Show `Image Generation` and `Streaming Chat` as disabled `Coming soon`.
+- [x] Add helper copy: `More templates are planned in upcoming releases.`
+- [x] Keep backend validation strict to `template: "chatCompletion"`.
 
-### Phase D: End-to-End Real Validation (Release Gate)
-- [ ] Execute true E2E run with:
-  - real context file upload
-  - realistic multi-file code sample
-  - real OpenAI key from user (runtime only)
-  - real deploy + invoke + response check
-- [ ] Run negative-path tests:
-  - missing entry file
-  - malformed files array
-  - legacy v1 `code` payload returns expected migration error
-  - empty system prompt (fallback behavior)
-  - backend unavailable
-- [ ] Fix all blocking issues discovered during E2E.
-- [ ] Document test evidence and findings in this file.
+### Phase D: End-to-End Validation (Release Gate)
+- [x] Run true E2E with real context upload, real multi-file deploy, real OpenAI key from runtime env, real invoke.
+- [x] Run negative-path tests for missing entry file, malformed files array, legacy `code` payload, empty `systemPrompt` fallback behavior, backend unavailable.
+- [x] Fix blocking issues found during E2E.
+- [x] Document test evidence in this file.
 
-### Phase E: Documentation + Final Prune
-- [ ] Update `README.md` usage examples to v2 contract.
-- [ ] Keep `AGENTS.md`, `PLAN.md`, `DECISIONS.md` concise and current.
-- [ ] Move superseded details to `DECISIONS_ARCHIVE.md`.
+### Phase E: Docs + Prune
+- [x] Update `README.md` usage/contract to v2.
+- [x] Update `PLAN.md` and `DECISIONS.md` to current state.
+- [x] Keep docs concise and aligned with implementation.
 
-## Test Logging Template (Use During v2)
-Use concise entries only:
+## Validation Evidence
 
-- **Date/Time:**
-- **Environment:** local SAM / deployed AWS
-- **Scenario:**
-- **Input:**
-- **Result:** pass/fail
-- **Fix/Follow-up:**
+- **Date/Time:** 2026-02-15
+- **Environment:** local backend runtime + real AWS resources
+- **Scenario:** Backend and frontend quality gates
+- **Input:** `backend` (`npm run typecheck`, `npm run build`, `npm run sam:validate`), `frontend` (`npm run lint`, `npm run build`)
+- **Result:** pass
+- **Fix/Follow-up:** none
 
-## Security Rules for v2 E2E
-- Real OpenAI key must never be committed to repo files.
-- Use local env variable injection during tests.
-- Canonical local key source: `OPENAI_API_KEY`.
-- Redact sensitive values in all logs and notes.
+- **Date/Time:** 2026-02-15
+- **Environment:** backend handler local invocation (`dist/handler.js`)
+- **Scenario:** Negative deploy payload validations
+- **Input:** legacy `code`, missing entry file, unsafe path traversal, duplicate paths, invalid extension, malformed files array, empty `s3ContextFiles` value
+- **Result:** pass (`400` with specific validation messages)
+- **Fix/Follow-up:** none
 
-## Additional Recommended v2 Items (After Core 4)
-- IAM least-privilege tightening for backend SAM role.
-- Optional deploy cleanup helper (list/delete test lambdas) to reduce AWS clutter/cost.
-- Basic request/response telemetry fields in deploy logs (without sensitive data).
+- **Date/Time:** 2026-02-15
+- **Environment:** real AWS + real OpenAI path (runtime `OPENAI_API_KEY`)
+- **Scenario:** Full `/upload` -> `/deploy` (multi-file + system prompt) -> Function URL invoke
+- **Input:** multipart context upload, multi-file TS payload (`handler.ts`, `utils/prompt.ts`), `entryFile: "handler.ts"`, real key from env
+- **Result:** pass (deployment succeeded, response returned), cleanup pass (test Lambda deleted)
+- **Fix/Follow-up:** none
+
+- **Date/Time:** 2026-02-15
+- **Environment:** real AWS + real OpenAI path (runtime `OPENAI_API_KEY`)
+- **Scenario:** Empty `systemPrompt` fallback behavior
+- **Input:** deploy with `systemPrompt: ""`, live prompt sentinel check via model response
+- **Result:** pass (`FALLBACK_OK`), cleanup pass (test Lambda deleted)
+- **Fix/Follow-up:** none
+
+- **Date/Time:** 2026-02-15
+- **Environment:** local network probe
+- **Scenario:** Backend unavailable negative path
+- **Input:** `curl --max-time 3 http://127.0.0.1:65530/health`
+- **Result:** pass (connection failure detected, expected)
+- **Fix/Follow-up:** none
+
+## Security Rules (Enforced)
+- Real OpenAI key used only from local runtime env (`OPENAI_API_KEY`).
+- No secrets written to repository files.
+- Test logs redact sensitive values.

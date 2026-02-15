@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto';
 import { createWriteStream } from 'fs';
-import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import archiver from 'archiver';
+import { build } from 'esbuild';
 import {
   AddPermissionCommand,
   CreateFunctionCommand,
@@ -37,10 +38,28 @@ const BASIC_EXEC_POLICY = 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicEx
 const S3_READONLY_POLICY = 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess';
 const DEFAULT_EXEC_ROLE_NAME = 'ai-lambda-forger-mvp-role';
 
+const HANDLER_EXPORT_REGEX =
+  /\bexport\s+(async\s+)?function\s+handler\b|\bexport\s+const\s+handler\b|\bexport\s*\{\s*handler(?:\s+as\s+\w+)?\s*\}/;
+const COMMON_JS_HANDLER_REGEX = /\bmodule\.exports\b|\bexports\.handler\b/;
+
+export interface DeploySourceFile {
+  path: string;
+  content: string;
+}
+
+export class ClientInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClientInputError';
+  }
+}
+
 export interface DeployPayload {
-  code: string;
+  files: DeploySourceFile[];
+  entryFile: string;
   template: 'chatCompletion';
   openaiKey: string;
+  systemPrompt?: string;
   s3ContextFiles?: string[];
 }
 
@@ -55,28 +74,23 @@ interface DeployOptions {
   roleArnOverride?: string;
 }
 
-function validateUserCode(code: string): void {
-  const trimmed = code.trim();
+function ensureEntryExportsHandler(entryCode: string, entryFile: string): void {
+  const trimmed = entryCode.trim();
   if (!trimmed) {
-    throw new Error('`code` is required and must be a non-empty string.');
+    throw new ClientInputError(`Entry file \`${entryFile}\` cannot be empty.`);
   }
 
-  // MVP template contract uses ESM handlers (`export const handler = ...`).
-  const hasEsmHandlerExport =
-    /\bexport\s+(async\s+)?function\s+handler\b/.test(trimmed) ||
-    /\bexport\s+const\s+handler\b/.test(trimmed);
-  const looksLikeCommonJs =
-    /\bmodule\.exports\b/.test(trimmed) || /\bexports\.handler\b/.test(trimmed);
-
-  if (!hasEsmHandlerExport) {
-    if (looksLikeCommonJs) {
-      throw new Error(
-        'Code must export `handler` using ESM syntax for MVP (for example: `export const handler = async (event) => { ... }`).',
-      );
-    }
-
-    throw new Error('Code must export a `handler` function (ESM) to deploy.');
+  if (HANDLER_EXPORT_REGEX.test(trimmed)) {
+    return;
   }
+
+  if (COMMON_JS_HANDLER_REGEX.test(trimmed)) {
+    throw new ClientInputError(
+      `Entry file \`${entryFile}\` must export \`handler\` using ESM syntax (for example: \`export const handler = async (event) => { ... }\`).`,
+    );
+  }
+
+  throw new ClientInputError(`Entry file \`${entryFile}\` must export a \`handler\` function.`);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -136,18 +150,71 @@ async function ensureExecutionRole(iamClient: IAMClient): Promise<string> {
   return created.Role.Arn;
 }
 
-async function buildDeploymentBundle(code: string): Promise<Buffer> {
-  validateUserCode(code);
+function resolveWorkspacePath(workspaceRoot: string, relativePath: string): string {
+  const candidate = path.resolve(workspaceRoot, relativePath);
+  const relative = path.relative(workspaceRoot, candidate);
+
+  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+    return candidate;
+  }
+
+  throw new ClientInputError(`Unsafe file path detected while packaging: ${relativePath}`);
+}
+
+function containsOpenAiImport(files: DeploySourceFile[]): boolean {
+  return files.some((file) =>
+    /from\s+['"]openai['"]|require\(\s*['"]openai['"]\s*\)|import\s*\(\s*['"]openai['"]\s*\)/.test(file.content),
+  );
+}
+
+async function buildDeploymentBundle(payload: DeployPayload): Promise<Buffer> {
+  const entryFile = payload.files.find((file) => file.path === payload.entryFile);
+  if (!entryFile) {
+    throw new ClientInputError(`Entry file \`${payload.entryFile}\` was not found in \`files\`.`);
+  }
+
+  ensureEntryExportsHandler(entryFile.content, payload.entryFile);
 
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'lambda-deploy-'));
   const zipPath = path.join(tmpdir(), `lambda-deploy-bundle-${randomUUID()}.zip`);
-  const needsOpenAiDependency =
-    /from\s+['"]openai['"]/.test(code) ||
-    /require\(\s*['"]openai['"]\s*\)/.test(code) ||
-    /import\s*\(\s*['"]openai['"]\s*\)/.test(code);
+  const needsOpenAiDependency = containsOpenAiImport(payload.files);
 
   try {
-    await writeFile(path.join(tempRoot, 'handler.js'), code, 'utf8');
+    for (const file of payload.files) {
+      const outputFile = resolveWorkspacePath(tempRoot, file.path);
+      await mkdir(path.dirname(outputFile), { recursive: true });
+      await writeFile(outputFile, file.content, 'utf8');
+    }
+
+    const bundledHandlerPath = path.join(tempRoot, 'handler.mjs');
+    const entryPath = resolveWorkspacePath(tempRoot, payload.entryFile);
+
+    try {
+      await build({
+        entryPoints: [entryPath],
+        outfile: bundledHandlerPath,
+        bundle: true,
+        format: 'esm',
+        platform: 'node',
+        target: 'node22',
+        packages: 'external',
+        sourcemap: false,
+        logLevel: 'silent',
+      });
+    } catch (error) {
+      const details =
+        typeof error === 'object' &&
+        error !== null &&
+        'errors' in error &&
+        Array.isArray((error as { errors?: Array<{ text?: string }> }).errors)
+          ? (error as { errors: Array<{ text?: string }> }).errors.find((item) => typeof item.text === 'string')?.text
+          : undefined;
+
+      throw new ClientInputError(
+        `Failed to build entry file \`${payload.entryFile}\`${details ? `: ${details}` : '. Check file imports and syntax.'}`,
+      );
+    }
+
     await writeFile(
       path.join(tempRoot, 'package.json'),
       JSON.stringify(
@@ -190,8 +257,8 @@ export async function deployLambda(payload: DeployPayload, options: DeployOption
   const iamClient = new IAMClient({ region: options.region });
 
   const functionName = `ai-lambda-user-${randomUUID().slice(0, 8)}`;
+  const zipBytes = await buildDeploymentBundle(payload);
   const roleArn = options.roleArnOverride || (await ensureExecutionRole(iamClient));
-  const zipBytes = await buildDeploymentBundle(payload.code);
 
   await lambdaClient.send(
     new CreateFunctionCommand({
@@ -205,6 +272,7 @@ export async function deployLambda(payload: DeployPayload, options: DeployOption
       Environment: {
         Variables: {
           OPENAI_API_KEY: payload.openaiKey,
+          SYSTEM_PROMPT: payload.systemPrompt || '',
           S3_CONTEXT_FILES: (payload.s3ContextFiles || []).join(','),
         },
       },

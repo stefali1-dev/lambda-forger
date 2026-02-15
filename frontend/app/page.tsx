@@ -44,9 +44,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { deployLambda, getBackendBaseUrl, getHealth, type DeployResponse, uploadFiles } from "@/lib/api";
 import { ensureMocking } from "@/lib/msw";
-import { templates } from "@/templates";
+import { templates, type TemplateName } from "@/templates";
 
 type HealthState = "checking" | "online" | "offline";
 
@@ -58,6 +59,18 @@ interface CodeFile {
 }
 
 const INITIAL_FILE_NAME = "handler.ts";
+const DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant for a frontend app.";
+
+const TEMPLATE_OPTIONS: Array<{
+  value: string;
+  label: string;
+  disabled?: boolean;
+}> = [
+  { value: "chatCompletion", label: "Chat Completion" },
+  { value: "imageGeneration", label: "Image Generation (Coming soon)", disabled: true },
+  { value: "streamingChat", label: "Streaming Chat (Coming soon)", disabled: true },
+];
+const SOURCE_FILE_EXTENSION_REGEX = /\.(ts|js|mjs|cjs|mts|cts)$/i;
 
 function createFileId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -67,15 +80,27 @@ function createFileId(): string {
 }
 
 function normalizeFileName(rawName: string): string {
-  const trimmed = rawName.trim();
-  const safe = trimmed.replace(/[^a-zA-Z0-9._-]/g, "-");
-  if (!safe) {
+  const trimmed = rawName.trim().replace(/\\/g, "/");
+  if (!trimmed) {
     return "untitled.ts";
   }
-  if (!safe.includes(".")) {
-    return `${safe}.ts`;
+
+  const segments = trimmed
+    .split("/")
+    .map((segment) => segment.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/^\.+$/, "file"))
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    return "untitled.ts";
   }
-  return safe;
+
+  const joined = segments.join("/");
+  const lastSegment = segments[segments.length - 1];
+  if (lastSegment && !lastSegment.includes(".")) {
+    return `${joined}.ts`;
+  }
+
+  return joined;
 }
 
 function getUniqueFileName(existingFiles: CodeFile[], candidate: string): string {
@@ -96,6 +121,18 @@ function getUniqueFileName(existingFiles: CodeFile[], candidate: string): string
   return next;
 }
 
+function isSafeSourcePath(value: string): boolean {
+  const normalized = value.trim().replace(/\\/g, "/");
+  if (!normalized || normalized.startsWith("/") || /^[a-zA-Z]:\//.test(normalized)) {
+    return false;
+  }
+  const segments = normalized.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    return false;
+  }
+  return SOURCE_FILE_EXTENSION_REGEX.test(normalized);
+}
+
 export default function Home() {
   const [files, setFiles] = useState<CodeFile[]>([
     {
@@ -107,7 +144,9 @@ export default function Home() {
   ]);
   const [activeFileId, setActiveFileId] = useState<string>(INITIAL_FILE_NAME);
 
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateName>("chatCompletion");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -130,8 +169,18 @@ export default function Home() {
   const targetFile = useMemo(() => files.find((file) => file.id === targetFileId) ?? null, [files, targetFileId]);
 
   const canDeploy = useMemo(() => {
-    return Boolean(entryFile?.content.trim()) && openaiKey.trim().length > 0 && !isUploading;
-  }, [entryFile, isUploading, openaiKey]);
+    const hasEntryContent = Boolean(entryFile?.content.trim());
+    const allFilesPopulated = files.every((file) => file.content.trim().length > 0);
+    const allPathsValid = files.every((file) => isSafeSourcePath(file.name));
+    return (
+      selectedTemplate === "chatCompletion" &&
+      hasEntryContent &&
+      allFilesPopulated &&
+      allPathsValid &&
+      openaiKey.trim().length > 0 &&
+      !isUploading
+    );
+  }, [entryFile, files, isUploading, openaiKey, selectedTemplate]);
 
   useEffect(() => {
     let active = true;
@@ -191,6 +240,11 @@ export default function Home() {
 
   const submitAddFile = (): void => {
     const nextName = getUniqueFileName(files, fileNameDraft);
+    if (!isSafeSourcePath(nextName)) {
+      toast.error("File path must be relative and use .ts, .js, .mjs, .cjs, .mts, or .cts.");
+      return;
+    }
+
     const nextFile: CodeFile = {
       id: createFileId(),
       name: nextName,
@@ -223,6 +277,10 @@ export default function Home() {
 
     const siblings = files.filter((item) => item.id !== targetFileId);
     const nextName = getUniqueFileName(siblings, fileNameDraft);
+    if (!isSafeSourcePath(nextName)) {
+      toast.error("File path must be relative and use .ts, .js, .mjs, .cjs, .mts, or .cts.");
+      return;
+    }
 
     setFiles((currentFiles) =>
       currentFiles.map((item) => (item.id === targetFileId ? { ...item, name: nextName } : item)),
@@ -296,8 +354,31 @@ export default function Home() {
   };
 
   const handleDeploy = async (): Promise<void> => {
+    if (selectedTemplate !== "chatCompletion") {
+      const message = "Only Chat Completion template is available in MVP v2.";
+      setDeployError(message);
+      toast.error(message);
+      return;
+    }
+
     if (!entryFile) {
       const message = "No entry file selected.";
+      setDeployError(message);
+      toast.error(message);
+      return;
+    }
+
+    const emptyFile = files.find((file) => file.content.trim().length === 0);
+    if (emptyFile) {
+      const message = `File "${emptyFile.name}" is empty. Add content before deploying.`;
+      setDeployError(message);
+      toast.error(message);
+      return;
+    }
+
+    const invalidPathFile = files.find((file) => !isSafeSourcePath(file.name));
+    if (invalidPathFile) {
+      const message = `Invalid file path or extension: "${invalidPathFile.name}".`;
       setDeployError(message);
       toast.error(message);
       return;
@@ -309,9 +390,11 @@ export default function Home() {
 
     try {
       const result = await deployLambda({
-        code: entryFile.content,
-        template: "chatCompletion",
-        openaiKey,
+        template: selectedTemplate,
+        openaiKey: openaiKey.trim(),
+        systemPrompt,
+        files: files.map((file) => ({ path: file.name, content: file.content })),
+        entryFile: entryFile.name,
         s3ContextFiles: uploadedFiles.map((file) => file.s3Url),
       });
       setDeployResult(result);
@@ -327,6 +410,60 @@ export default function Home() {
 
   const renderDeploymentControls = (workspace = false) => (
     <>
+      <Card className={workspace ? "border-slate-700 bg-slate-900/90 text-slate-100" : "border-border/70 bg-card/70"}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">Template</CardTitle>
+          <CardDescription className={workspace ? "text-slate-300" : undefined}>
+            Choose deployment template for this Lambda.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <select
+            value={selectedTemplate}
+            className={
+              workspace
+                ? "w-full rounded-md border border-slate-700 bg-slate-950/85 px-3 py-2 text-sm text-slate-100"
+                : "w-full rounded-md border border-border/70 bg-background/80 px-3 py-2 text-sm"
+            }
+            onChange={(event) => {
+              if (event.target.value === "chatCompletion") {
+                setSelectedTemplate("chatCompletion");
+              }
+            }}
+          >
+            {TEMPLATE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value} disabled={option.disabled}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className={`text-xs ${workspace ? "text-slate-300" : "text-muted-foreground"}`}>
+            More templates are planned in upcoming releases.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className={workspace ? "border-slate-700 bg-slate-900/90 text-slate-100" : "border-border/70 bg-card/70"}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">System Prompt</CardTitle>
+          <CardDescription className={workspace ? "text-slate-300" : undefined}>
+            Stored in Lambda env as <span className="font-mono">SYSTEM_PROMPT</span> at deploy time.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Textarea
+            value={systemPrompt}
+            rows={4}
+            placeholder={DEFAULT_SYSTEM_PROMPT}
+            className={workspace ? "border-slate-700 bg-slate-950/85 text-slate-100" : undefined}
+            onChange={(event) => setSystemPrompt(event.target.value)}
+          />
+          <p className={`text-xs ${workspace ? "text-slate-300" : "text-muted-foreground"}`}>
+            Runtime code reads this value from env with a fallback when empty.
+          </p>
+        </CardContent>
+      </Card>
+
       <Card className={workspace ? "border-slate-700 bg-slate-900/90 text-slate-100" : "border-border/70 bg-card/70"}>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold">OpenAI API Key</CardTitle>

@@ -8,9 +8,14 @@ export interface UploadResponse {
 }
 
 export interface DeployRequest {
-  code: string;
   template: "chatCompletion";
   openaiKey: string;
+  systemPrompt: string;
+  files: Array<{
+    path: string;
+    content: string;
+  }>;
+  entryFile: string;
   s3ContextFiles?: string[];
 }
 

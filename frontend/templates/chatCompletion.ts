@@ -28,8 +28,10 @@ export const handler = async (event) => {
       .map((value) => value.trim())
       .filter(Boolean);
 
+    const configuredSystemPrompt = (process.env.SYSTEM_PROMPT || "").trim();
+    const baseSystemPrompt = configuredSystemPrompt || "You are a helpful assistant for a frontend app.";
     const systemPrompt = [
-      "You are a helpful assistant for a frontend app.",
+      baseSystemPrompt,
       contextFiles.length > 0
         ? "Use the following S3 context file references when relevant:\n" + contextFiles.join("\n")
         : "No external context files were provided.",

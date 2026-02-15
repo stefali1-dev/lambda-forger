@@ -4,7 +4,7 @@ Frontend-first tool to deploy context-aware OpenAI Lambda endpoints quickly.
 
 ## Status
 - MVP v1: completed.
-- MVP v2: active (multi-file deploy parity, system prompt UX, template roadmap affordance, full real E2E hardening).
+- MVP v2: implemented and validated (multi-file deploy, system prompt env wiring, template roadmap affordance, real AWS/OpenAI E2E).
 
 ## Canonical Docs
 - `README.md`: runbook
@@ -19,18 +19,32 @@ Frontend-first tool to deploy context-aware OpenAI Lambda endpoints quickly.
 - APIs: `GET /health`, `POST /upload`, `POST /deploy`
 - Deploy target: AWS Lambda Function URL
 
-## MVP v2 Scope
-1. Full multi-file deploy support in backend + API contract.
-2. System prompt as frontend field, deployed via env var (`SYSTEM_PROMPT`).
-3. Template roadmap signposting in UI with selector:
-   - `Chat Completion` enabled
-   - future templates disabled with `Coming soon`
-   - helper text: `More templates are planned in upcoming releases.`
-4. Intensive real end-to-end testing with real AWS + OpenAI path, then bug fixes.
+## MVP v2 Delivered
+1. Multi-file deploy contract (`files[]`, `entryFile`) with strict backend validation.
+2. Legacy v1 `code` deploy payload removed with clear `400` migration error.
+3. System prompt field in UI, passed in deploy payload, injected as Lambda env var `SYSTEM_PROMPT`.
+4. Template selector UI with `Chat Completion` enabled and disabled roadmap options labeled `Coming soon`.
+5. Real AWS upload/deploy/invoke validation using runtime `OPENAI_API_KEY`, with cleanup.
 
 ## Deploy Contract (v2)
-- Required shape uses `files[]` + `entryFile`.
-- Legacy v1 `code` payload is unsupported and should return a clear `400` migration error.
+```json
+{
+  "template": "chatCompletion",
+  "openaiKey": "sk-...",
+  "systemPrompt": "You are a helpful assistant...",
+  "files": [
+    { "path": "handler.ts", "content": "..." },
+    { "path": "utils/prompt.ts", "content": "..." }
+  ],
+  "entryFile": "handler.ts",
+  "s3ContextFiles": ["s3://..."]
+}
+```
+
+Notes:
+- Backend accepts only `template: "chatCompletion"` in v2.
+- `files[].path` must be relative and use `.ts`, `.js`, `.mjs`, `.cjs`, `.mts`, or `.cts`.
+- Legacy v1 `code` payload is rejected with actionable migration error (`400`).
 
 ## Backend Runbook
 ```bash

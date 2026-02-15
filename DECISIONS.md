@@ -2,109 +2,73 @@
 
 **Project:** AI Lambda Forger MVP v2  
 **Purpose:** Keep only active/current decisions and blockers.  
-**History:** See `DECISIONS_ARCHIVE.md` for superseded and historical entries.
+**History:** `DECISIONS_ARCHIVE.md`
 
 ## Active Decisions
 
-### D1: v2 focus = complete chat workflow quality, not new model capabilities
+### D1: v2 remains chat-focused (no streaming/image execution yet)
 **Date:** 2026-02-15  
-**Decision:** v2 prioritizes production-grade chat deploy UX and reliability over adding streaming/image execution.
+**Decision:** Keep backend and runtime strict to `template: "chatCompletion"` while exposing roadmap affordance in UI.
 
 Why:
-- Fastest path to a shippable second iteration.
-- Reduces integration risk while improving real user value.
+- Preserves delivery focus and reliability for current core value.
+- Avoids partial support for deferred capabilities.
 
 ---
 
-### D2: Deploy contract evolves to native multi-file payload
+### D2: Deploy API cutover is hard and explicit
 **Date:** 2026-02-15  
-**Decision:** Add `files[]` + `entryFile` in deploy payload as first-class inputs.
-
-Decision details:
-- `files` contains path/content pairs.
-- `entryFile` must point to one file in `files`.
-- `template` remains `chatCompletion` in v2.
-- v1 `code` payload is removed in v2; backend returns clear `400` migration error for legacy requests.
+**Decision:** Remove v1 `code` payload support; require `files[]` + `entryFile` with actionable migration `400`.
 
 Why:
-- Frontend already has multi-file UX.
-- Backend must match user mental model and avoid hidden single-file behavior.
-- Hard cutover reduces dual-path complexity and ambiguous behavior.
+- Avoids dual behavior ambiguity.
+- Aligns frontend workspace model with backend packaging model.
 
 ---
 
-### D3: System prompt becomes deploy-time configuration, not hardcoded template text
+### D3: Entry file contract is fixed handler symbol in v2
 **Date:** 2026-02-15  
-**Decision:** UI sends `systemPrompt`; backend sets `SYSTEM_PROMPT`; runtime code reads env var.
+**Decision:** Require entry file to export ESM `handler`; backend bundles selected entry to `handler.mjs` and deploys with `Handler: "handler.handler"`.
 
 Why:
-- Better UX and faster iteration without direct code edits.
-- Cleaner separation of template logic vs per-deployment customization.
+- Deterministic runtime target.
+- Clear validation errors for misconfigured entry files.
 
 ---
 
-### D4: Template roadmap affordance should be visible in UI (chat enabled, others disabled)
+### D4: System prompt is deployment configuration, not template constant
 **Date:** 2026-02-15  
-**Decision:** Use a real selector control with:
-- `Chat Completion` enabled
-- future templates shown disabled + `Coming soon`
-- helper text: `More templates are planned in upcoming releases.`
+**Decision:** UI sends `systemPrompt`, backend injects `SYSTEM_PROMPT`, runtime template reads env var with fallback.
 
-Why chosen:
-- Strongest signal that template expansion is planned.
-- Minimal engineering overhead.
-- Clear without promising unsupported behavior.
+Why:
+- Faster per-deployment customization.
+- No template source edits required for prompt tuning.
 
 ---
 
-### D5: Real-key E2E validation is mandatory for v2 release
+### D5: v2 release gate requires real AWS/OpenAI evidence
 **Date:** 2026-02-15  
-**Decision:** Run true E2E with user-provided OpenAI key and real AWS resources before v2 closure.
+**Decision:** Run real upload/deploy/invoke and negative-path tests using runtime `OPENAI_API_KEY`; record concise evidence in `PLAN.md`.
 
-Security constraints:
-- Never store key in repository files.
-- Never print full key in logs/docs.
-- Use runtime env injection only.
-- Use local `OPENAI_API_KEY` as canonical source for E2E runs.
+Why:
+- Mock-only validation is insufficient for deployment/runtime risks.
+- Ensures end-to-end behavior is verified before closure.
 
 ---
 
-### D6: Documentation pruning is an ongoing responsibility
+### D6: Validation strictness applies to file paths and extensions
 **Date:** 2026-02-15  
-**Decision:** Keep primary docs short and implementation-aligned; archive historical narrative.
+**Decision:** Reject unsafe/ambiguous paths and unsupported extensions; support `.ts`, `.js`, `.mjs`, `.cjs`, `.mts`, `.cts`.
 
-Practical rule:
-- If a section no longer affects current decisions/execution, condense or move it to `DECISIONS_ARCHIVE.md`.
+Why:
+- Prevents path traversal and ambiguous packaging behavior.
+- Keeps runtime expectations explicit and user-facing.
 
 ## Active Blockers / Open Questions
-
-### B1: Multi-file entry strategy implementation detail
-**Status:** OPEN  
-**Question:** In v2, should deploy enforce a fixed exported handler symbol from `entryFile`?
-
-Options:
-1. Require `export const handler` in entry file (recommended).
-2. Support configurable handler symbol in payload (defer).
-
-Recommendation:
-- Keep symbol fixed in v2 for simpler validation and fewer runtime errors.
-
----
-
-### B2: E2E evidence format and storage
-**Status:** OPEN  
-**Question:** Where should detailed test evidence be stored?
-
-Options:
-1. `PLAN.md` short structured logs (recommended).
-2. Separate `TEST_LOG.md` if logs grow beyond concise size.
-
-Recommendation:
-- Start in `PLAN.md`; split only if too large.
+- None.
 
 ## Maintenance Rules
-- Update this file when decisions change.
-- Move closed/superseded items to `DECISIONS_ARCHIVE.md`.
-- Keep this file focused on current execution only.
+- Keep only current-state decisions in this file.
+- Move superseded or historical detail to `DECISIONS_ARCHIVE.md`.
 
-**Last Updated:** 2026-02-15 23:40 EET
+**Last Updated:** 2026-02-15
