@@ -2,7 +2,7 @@
 
 **Time Budget:** 8-10 hours (ship today)  
 **Status:** 🚀 Chat-only MVP scope  
-**Last Updated:** 2026-02-15 18:03 EET
+**Last Updated:** 2026-02-15 18:11 EET
 
 ---
 
@@ -79,8 +79,8 @@ Progress note (2026-02-15): added `backend/src/spikes/functionUrlSpike.ts`, vali
 - [x] `npm init -y`
 - [x] Install deps:
   ```bash
-  npm i express cors aws-sdk @aws-sdk/client-lambda @aws-sdk/client-s3 @aws-sdk/client-iam dotenv archiver
-  npm i -D @types/node @types/express typescript ts-node nodemon
+  npm i @aws-sdk/client-lambda @aws-sdk/client-s3 @aws-sdk/client-iam dotenv archiver lambda-multipart-parser
+  npm i -D @types/node @types/aws-lambda typescript ts-node esbuild
   ```
 - [x] Create `tsconfig.json` (or use `npx tsc --init`)
 - [x] Create `.env`:
@@ -88,7 +88,7 @@ Progress note (2026-02-15): added `backend/src/spikes/functionUrlSpike.ts`, vali
   AWS_ACCESS_KEY_ID=your_key
   AWS_SECRET_ACCESS_KEY=your_secret
   AWS_REGION=eu-central-1
-  PORT=3001
+  DEPLOY_TARGET_REGION=eu-central-1
   ```
 - [x] Create backend API entrypoint (`src/handler.ts`) basic health endpoint
 - [x] Test: invoke `GET /health` via SAM local invoke/start-api
@@ -128,7 +128,7 @@ Progress note (2026-02-15): implemented `backend/src/deploy.ts` + wired `POST /d
 
 #### Task 1.3: Build S3 file upload handler
 - [x] Create `POST /upload` endpoint
-- [x] Accept multipart/form-data (use `multer` middleware or manual parsing)
+- [x] Accept multipart/form-data (Lambda parser for API Gateway events)
 - [x] Generate unique folder: `ai-lambda-context-${randomId()}`
 - [x] Upload files to S3:
   - Bucket: `ai-lambda-mvp` (create manually if doesn't exist)

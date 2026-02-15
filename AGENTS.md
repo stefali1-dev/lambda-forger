@@ -132,7 +132,7 @@ ai-lambda-builder/
 
 **1. AWS Lambda Function URLs (NEW AWS FEATURE)**
 - Use `CreateFunctionUrlConfigCommand` to get public HTTPS endpoint
-- **No API Gateway needed** (simplifies MVP)
+- **For user-deployed Lambdas, no API Gateway is needed** (simplifies MVP)
 - Enable CORS in function URL config
 - For public URLs (`AuthType: NONE`), add resource-policy permissions after URL creation:
   - `lambda:InvokeFunctionUrl` (with `FunctionUrlAuthType: NONE`)
@@ -304,6 +304,7 @@ npm install
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=eu-central-1
+DEPLOY_TARGET_REGION=eu-central-1
 # Type-check:
 npm run typecheck
 # Build TS:

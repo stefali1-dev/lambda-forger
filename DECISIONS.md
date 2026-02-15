@@ -264,6 +264,24 @@
 
 ---
 
+### Decision 14: Pin user-deployment region and make bucket errors explicit
+**Date:** 2026-02-15  
+**Context:** Local SAM testing showed user Lambdas could be created in an unintended region and `/upload` could fail with opaque bucket-create errors
+
+**Chosen:**
+1. Add explicit `DEPLOY_TARGET_REGION` env var for all user Lambda and S3 operations
+2. Keep bucket auto-create behavior, but handle ownership/already-exists errors with deterministic messages
+
+**Why:**
+- Avoids accidental deployments to `us-east-1` during local/testing environments
+- Preserves MVP ease-of-use while making failures easier to debug
+
+**Trade-offs:**
+- One more env var to manage in deployment config
+- Slightly more branching in S3 setup path
+
+---
+
 ## Open Questions / Blockers
 
 ### Blocker 1: IAM Role Creation Strategy

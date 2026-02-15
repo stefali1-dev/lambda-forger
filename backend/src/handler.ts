@@ -6,7 +6,7 @@ import { uploadContextFiles } from './s3Upload';
 
 dotenv.config();
 
-const AWS_REGION = process.env.AWS_REGION || 'eu-central-1';
+const DEPLOY_TARGET_REGION = process.env.DEPLOY_TARGET_REGION || process.env.AWS_REGION || 'eu-central-1';
 
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
@@ -99,8 +99,8 @@ async function handleDeploy(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
   try {
     const payload = parseDeployPayload(event);
     const deployOptions = process.env.MVP_LAMBDA_ROLE_ARN
-      ? { region: AWS_REGION, roleArnOverride: process.env.MVP_LAMBDA_ROLE_ARN }
-      : { region: AWS_REGION };
+      ? { region: DEPLOY_TARGET_REGION, roleArnOverride: process.env.MVP_LAMBDA_ROLE_ARN }
+      : { region: DEPLOY_TARGET_REGION };
 
     const result = await deployLambda(payload, deployOptions);
     return jsonResponse(200, result);
@@ -131,7 +131,7 @@ async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
         mimetype: file.contentType || 'text/plain',
       })),
       {
-        region: AWS_REGION,
+        region: DEPLOY_TARGET_REGION,
       },
     );
 

@@ -2,6 +2,12 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: AI Lambda Builder backend API (SAM + Node.js + TypeScript)
 
+Parameters:
+  DeployTargetRegion:
+    Type: String
+    Default: eu-central-1
+    Description: Region where user-deployed Lambda functions are created
+
 Globals:
   Function:
     Runtime: nodejs22.x
@@ -12,6 +18,7 @@ Globals:
     Environment:
       Variables:
         AWS_REGION: !Ref AWS::Region
+        DEPLOY_TARGET_REGION: !Ref DeployTargetRegion
         MVP_LAMBDA_ROLE_NAME: ai-lambda-builder-mvp-role
         S3_CONTEXT_BUCKET: ai-lambda-mvp-873550638583-euc1
 

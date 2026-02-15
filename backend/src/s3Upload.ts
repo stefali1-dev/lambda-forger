@@ -32,18 +32,37 @@ async function ensureBucket(s3Client: S3Client, bucketName: string, region: stri
   try {
     await s3Client.send(new HeadBucketCommand({ Bucket: bucketName }));
     return;
-  } catch {
-    // continue and attempt create
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    const shouldAttemptCreate = errorName === 'NotFound' || errorName === 'NoSuchBucket';
+
+    if (!shouldAttemptCreate) {
+      throw new Error(`Unable to access S3 bucket ${bucketName}: ${errorName}`);
+    }
   }
 
-  await s3Client.send(
-    new CreateBucketCommand({
-      Bucket: bucketName,
-      ...(region === 'us-east-1'
-        ? {}
-        : { CreateBucketConfiguration: { LocationConstraint: region as BucketLocationConstraint } }),
-    }),
-  );
+  try {
+    await s3Client.send(
+      new CreateBucketCommand({
+        Bucket: bucketName,
+        ...(region === 'us-east-1'
+          ? {}
+          : { CreateBucketConfiguration: { LocationConstraint: region as BucketLocationConstraint } }),
+      }),
+    );
+  } catch (error) {
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+
+    if (errorName === 'BucketAlreadyOwnedByYou') {
+      return;
+    }
+
+    if (errorName === 'BucketAlreadyExists') {
+      throw new Error(`S3 bucket ${bucketName} already exists in another AWS account.`);
+    }
+
+    throw new Error(`Failed to create S3 bucket ${bucketName}: ${errorName}`);
+  }
 }
 
 export async function uploadContextFiles(files: UploadedFileInput[], options: UploadOptions): Promise<UploadResult> {
