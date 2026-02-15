@@ -1,0 +1,169 @@
+import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import dotenv from 'dotenv';
+import multipart from 'lambda-multipart-parser';
+import { deployLambda, DeployPayload } from './deploy';
+import { uploadContextFiles } from './s3Upload';
+
+dotenv.config();
+
+const AWS_REGION = process.env.AWS_REGION || 'eu-central-1';
+
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET,POST,OPTIONS',
+  'access-control-allow-headers': 'content-type,authorization',
+};
+
+function jsonResponse(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
+  return {
+    statusCode,
+    headers: {
+      ...CORS_HEADERS,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+function getPath(event: APIGatewayProxyEventV2): string {
+  return event.rawPath || '/';
+}
+
+function decodeBody(event: APIGatewayProxyEventV2): string {
+  if (!event.body) {
+    return '';
+  }
+
+  return event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function parseDeployPayload(event: APIGatewayProxyEventV2): DeployPayload {
+  const bodyString = decodeBody(event);
+  if (!bodyString) {
+    throw new Error('Request body is required.');
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(bodyString) as Record<string, unknown>;
+  } catch {
+    throw new Error('Request body must be valid JSON.');
+  }
+
+  if (typeof payload.code !== 'string' || payload.code.trim().length === 0) {
+    throw new Error('`code` is required and must be a non-empty string.');
+  }
+
+  if (payload.template !== 'chatCompletion') {
+    throw new Error('`template` must be exactly "chatCompletion" for MVP.');
+  }
+
+  if (typeof payload.openaiKey !== 'string' || payload.openaiKey.trim().length === 0) {
+    throw new Error('`openaiKey` is required and must be a non-empty string.');
+  }
+
+  if (payload.s3ContextFiles !== undefined && !isStringArray(payload.s3ContextFiles)) {
+    throw new Error('`s3ContextFiles` must be an array of S3 URL strings.');
+  }
+
+  const parsed: DeployPayload = {
+    code: payload.code,
+    template: 'chatCompletion',
+    openaiKey: payload.openaiKey,
+  };
+
+  if (payload.s3ContextFiles !== undefined) {
+    parsed.s3ContextFiles = payload.s3ContextFiles;
+  }
+
+  return parsed;
+}
+
+function badRequest(message: string): APIGatewayProxyResultV2 {
+  return jsonResponse(400, { error: message });
+}
+
+function internalError(message: string): APIGatewayProxyResultV2 {
+  return jsonResponse(500, { error: message });
+}
+
+async function handleHealth(): Promise<APIGatewayProxyResultV2> {
+  return jsonResponse(200, { ok: true, service: 'ai-lambda-builder-backend' });
+}
+
+async function handleDeploy(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  try {
+    const payload = parseDeployPayload(event);
+    const deployOptions = process.env.MVP_LAMBDA_ROLE_ARN
+      ? { region: AWS_REGION, roleArnOverride: process.env.MVP_LAMBDA_ROLE_ARN }
+      : { region: AWS_REGION };
+
+    const result = await deployLambda(payload, deployOptions);
+    return jsonResponse(200, result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown deployment error.';
+    const isClientError =
+      message.includes('required') || message.includes('must') || message.includes('valid JSON');
+
+    return isClientError ? badRequest(message) : internalError(message);
+  }
+}
+
+async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  try {
+    const parsed = await multipart.parse(event as any);
+    const files = parsed.files || [];
+
+    if (files.length === 0) {
+      return badRequest('No files uploaded. Use multipart/form-data with field `files`.');
+    }
+
+    const result = await uploadContextFiles(
+      files.map((file) => ({
+        originalname: file.filename || 'upload.txt',
+        buffer: Buffer.isBuffer(file.content)
+          ? file.content
+          : Buffer.from(file.content as string, 'binary'),
+        mimetype: file.contentType || 'text/plain',
+      })),
+      {
+        region: AWS_REGION,
+      },
+    );
+
+    return jsonResponse(200, result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown upload error.';
+    return internalError(message);
+  }
+}
+
+export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  const method = event.requestContext.http.method.toUpperCase();
+  const path = getPath(event);
+
+  if (method === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers: CORS_HEADERS,
+    };
+  }
+
+  if (method === 'GET' && path === '/health') {
+    return handleHealth();
+  }
+
+  if (method === 'POST' && path === '/deploy') {
+    return handleDeploy(event);
+  }
+
+  if (method === 'POST' && path === '/upload') {
+    return handleUpload(event);
+  }
+
+  return jsonResponse(404, { error: `Route not found: ${method} ${path}` });
+}

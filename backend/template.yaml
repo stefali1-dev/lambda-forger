@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AI Lambda Builder backend API (SAM + Node.js + TypeScript)
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 120
+    MemorySize: 1024
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        AWS_REGION: !Ref AWS::Region
+        MVP_LAMBDA_ROLE_NAME: ai-lambda-builder-mvp-role
+        S3_CONTEXT_BUCKET: ai-lambda-mvp-873550638583-euc1
+
+Resources:
+  BackendHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - content-type
+          - authorization
+
+  BackendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/handler.handler
+      Events:
+        ApiRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BackendHttpApi
+            Method: ANY
+            Path: /
+        ApiProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BackendHttpApi
+            Method: ANY
+            Path: /{proxy+}
+      Policies:
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/IAMFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handler.ts
+        Target: es2022
+        Sourcemap: true
+        Minify: false
+
+Outputs:
+  BackendApiUrl:
+    Description: Base URL for backend HTTP API
+    Value: !Sub 'https://${BackendHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+  BackendFunctionName:
+    Description: Backend Lambda function name
+    Value: !Ref BackendFunction

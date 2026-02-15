@@ -244,6 +244,26 @@
 
 ---
 
+### Decision 13: Backend control plane runs on SAM-deployed Lambda (Node.js + TypeScript)
+**Date:** 2026-02-15  
+**Context:** Align MVP backend hosting with cheap, easy deployment and infrastructure-as-code requirements
+
+**Chosen:**
+1. Replace Express server backend with a Lambda route handler
+2. Deploy backend using AWS SAM (`backend/template.yaml`)
+3. Keep route contract unchanged (`GET /health`, `POST /deploy`, `POST /upload`)
+
+**Why:**
+- Lower ops overhead and closer production parity with app purpose
+- One-command build/deploy path with SAM
+- Keeps backend cost low for low-traffic MVP usage
+
+**Trade-offs:**
+- Multipart parsing is less ergonomic in Lambda than Express
+- IAM permissions are now defined in SAM and need deliberate tightening after MVP
+
+---
+
 ## Open Questions / Blockers
 
 ### Blocker 1: IAM Role Creation Strategy
@@ -288,6 +308,16 @@
 2. Attached `AWSLambdaBasicExecutionRole` and `AmazonS3ReadOnlyAccess`
 3. Set `MVP_LAMBDA_ROLE_ARN` in local backend `.env`
 4. Re-ran spike successfully with HTTP 200 invocation response
+
+---
+
+### Blocker 5: SAM backend IAM scope is broad for MVP speed
+**Status:** 📊 MONITOR  
+**Concern:** `backend/template.yaml` currently uses broad managed policies to unblock fast deployment (`AWSLambda_FullAccess`, `IAMFullAccess`, `AmazonS3FullAccess`)
+
+**Mitigation path:**
+1. Keep broad policies for same-day MVP shipping
+2. Tighten to least-privilege policy statements immediately after MVP validation
 
 ---
 

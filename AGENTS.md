@@ -65,11 +65,12 @@ ai-lambda-builder/
 │   │   │   └── imageGeneration.ts  # post-MVP
 │   │   └── App.tsx
 │   └── package.json
-├── backend/             # Node.js + Express API
+├── backend/             # AWS SAM backend (Lambda + TypeScript)
 │   ├── src/
-│   │   ├── server.ts               # Express server entry point
+│   │   ├── handler.ts              # Lambda handler entry point (API routes)
 │   │   ├── deploy.ts               # Lambda deployment logic (AWS SDK)
 │   │   └── s3Upload.ts             # S3 file upload handler
+│   ├── template.yaml               # SAM template
 │   └── package.json
 └── README.md
 ```
@@ -84,7 +85,7 @@ ai-lambda-builder/
 - `axios` (API calls to backend)
 
 **Backend:**
-- Node.js + Express + TypeScript
+- AWS Lambda (Node.js + TypeScript) deployed with AWS SAM
 - `@aws-sdk/client-lambda` (create Lambda functions)
 - `@aws-sdk/client-s3` (upload context files)
 - `@aws-sdk/client-iam` (create execution role if needed)
@@ -123,6 +124,11 @@ ai-lambda-builder/
 ---
 
 ## 🚨 Critical Constraints
+
+**0. Backend Hosting (MVP canonical)**
+- Backend control-plane API must run as a Lambda deployed by AWS SAM
+- Avoid long-running server process patterns as primary architecture
+- Keep backend endpoints implemented inside Lambda route handler (`/health`, `/deploy`, `/upload`)
 
 **1. AWS Lambda Function URLs (NEW AWS FEATURE)**
 - Use `CreateFunctionUrlConfigCommand` to get public HTTPS endpoint
@@ -294,11 +300,18 @@ Deferred template files (post-MVP):
 ```bash
 cd backend
 npm install
-# Create .env file:
+# Create .env file (for local tools/spikes):
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=eu-central-1
-npm run dev  # starts Express server on http://localhost:3001
+# Type-check:
+npm run typecheck
+# Build TS:
+npm run build
+# Run backend locally with SAM:
+sam local start-api
+# Deploy backend Lambda/API:
+sam build && sam deploy --guided
 ```
 
 ### Frontend
@@ -331,6 +344,7 @@ npm start  # starts React app on http://localhost:3000
 - Communicate clearly and directly: concise status updates, explicit assumptions, concrete next steps.
 - Default behavior: move work forward unless blocked by a true product/architecture decision.
 - Commit regularly after completing meaningful slices, and push to remote to preserve progress.
+- Treat SAM template + Lambda runtime as part of the source of truth; keep code and infra definitions aligned in each backend change.
 
 ---
 

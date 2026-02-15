@@ -2,7 +2,7 @@
 
 **Time Budget:** 8-10 hours (ship today)  
 **Status:** 🚀 Chat-only MVP scope  
-**Last Updated:** 2026-02-15 17:55 EET
+**Last Updated:** 2026-02-15 18:03 EET
 
 ---
 
@@ -33,7 +33,8 @@
 # Terminal 1
 cd backend
 npm install
-npm run dev
+npm run typecheck
+sam local start-api
 
 # Terminal 2
 cd frontend
@@ -57,7 +58,7 @@ Execution framing for agents:
 
 ## 📋 TODO LIST
 
-### **PHASE 1: Backend - AWS Deployment Engine** (~3-4 hours)
+### **PHASE 1: Backend - AWS Deployment Engine (SAM Lambda)** (~3-4 hours)
 
 #### SPIKE 1: Research AWS Lambda Function URLs ⚠️ **DO THIS FIRST**
 - [x] Read AWS docs: https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html
@@ -89,18 +90,19 @@ Progress note (2026-02-15): added `backend/src/spikes/functionUrlSpike.ts`, vali
   AWS_REGION=eu-central-1
   PORT=3001
   ```
-- [x] Create `src/server.ts` basic Express server (hello world endpoint)
-- [x] Test: `npm run dev` → curl http://localhost:3001 → get response
+- [x] Create backend API entrypoint (`src/handler.ts`) basic health endpoint
+- [x] Test: invoke `GET /health` via SAM local invoke/start-api
 - **Time estimate:** 15 min
 
 Progress note (2026-02-15): dependencies installed, scripts added in `backend/package.json`, and `.env.example` created.
+Progress note (2026-02-15): architecture migrated from Express to SAM Lambda (`backend/src/handler.ts` + `backend/template.yaml`).
 
 ---
 
 #### Task 1.2: Build Lambda deployment endpoint ⭐ **CORE FEATURE**
-- [x] Create `POST /deploy` endpoint in `src/server.ts`
+- [x] Create `POST /deploy` endpoint in backend handler
 - [x] Validate request body: `code`, `template: "chatCompletion"`, `openaiKey`, optional `s3ContextFiles`
-- [ ] Implement deploy flow checklist:
+- [x] Implement deploy flow checklist:
   1. [x] Generate function name (`ai-lambda-${randomId()}`)
   2. [x] Create temp dir and write `handler.js`
   3. [x] Write `package.json` with `openai` dependency
@@ -113,7 +115,7 @@ Progress note (2026-02-15): dependencies installed, scripts added in `backend/pa
   10. [x] Return `functionUrl`, `functionName`, `curlExample`
 - [x] Match endpoint contract from `AGENTS.md` (`POST /deploy` section)
 
-Progress note (2026-02-15): implemented `backend/src/deploy.ts` + wired `POST /deploy` in `backend/src/server.ts`; manual deploy test returned URL and successful `200` invocation.
+Progress note (2026-02-15): implemented `backend/src/deploy.ts` + wired `POST /deploy` route in Lambda handler; manual deploy test returned URL and successful `200` invocation.
 
 **Shortcuts if stuck:**
 - IAM role: Create manually in AWS console, hardcode ARN in code
@@ -139,7 +141,7 @@ Progress note (2026-02-15): implemented `backend/src/deploy.ts` + wired `POST /d
   ```
 - **Time estimate:** 45 min
 
-Progress note (2026-02-15): implemented `backend/src/s3Upload.ts` and wired `/upload` in `backend/src/server.ts`; manual multipart upload returned S3 URL and object existence verified via `aws s3 ls`.
+Progress note (2026-02-15): implemented `backend/src/s3Upload.ts` and wired `/upload` in Lambda handler; manual multipart upload returned S3 URL and object existence verified via `aws s3 ls`.
 
 **Shortcut:** If S3 upload is too slow, skip it for MVP. Hardcode one sample context file in Lambda.
 
@@ -156,6 +158,16 @@ Progress note (2026-02-15): implemented `backend/src/s3Upload.ts` and wired `/up
 - [ ] Verify function URL works: `curl https://abc123.lambda-url.../ -X POST -d '{}'`
 - [ ] Test `/upload` endpoint with a .txt file
 - **Time estimate:** 30 min
+
+---
+
+#### Task 1.5: Migrate backend runtime to SAM Lambda (Node.js + TypeScript)
+- [x] Replace Express server entrypoint with Lambda handler route dispatcher
+- [x] Add SAM template (`backend/template.yaml`) for backend API Lambda
+- [x] Keep API contract compatibility for `/health`, `/deploy`, `/upload`
+- [x] Validate SAM template and build artifacts (`sam validate`, `sam build`)
+- [x] Smoke test Lambda handler with `sam local invoke`
+- **Time estimate:** 45 min
 
 ---
 
