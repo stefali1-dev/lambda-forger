@@ -4,8 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "clean": "rm -rf dist .aws-sam/build",
+    "prebuild": "npm run clean",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "sam:validate": "sam validate --lint --template-file template.yaml",
     "sam:build": "sam build",
     "sam:local": "sam local start-api",
     "sam:deploy": "sam deploy --guided",
@@ -21,14 +24,15 @@
     "@aws-sdk/client-lambda": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
     "archiver": "^7.0.1",
+    "busboy": "^1.6.0",
     "dotenv": "^17.3.1",
-    "lambda-multipart-parser": "^1.0.1"
+    "esbuild": "^0.27.3"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
     "@types/aws-lambda": "^8.10.160",
+    "@types/busboy": "^1.5.4",
     "@types/node": "^25.2.3",
-    "esbuild": "^0.27.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

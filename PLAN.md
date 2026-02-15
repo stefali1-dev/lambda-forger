@@ -1,8 +1,8 @@
-# PLAN.md - AI Lambda Builder MVP
+# PLAN.md - AI Lambda Forger MVP
 
 **Time Budget:** 8-10 hours (ship today)  
 **Status:** 🚀 Chat-only MVP scope  
-**Last Updated:** 2026-02-15 18:11 EET
+**Last Updated:** 2026-02-15 21:05 EET
 
 ---
 
@@ -38,7 +38,10 @@ sam local start-api
 
 # Terminal 2
 cd frontend
-npm install && npm start
+npm install
+echo "NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:3000" > .env.local
+echo "NEXT_PUBLIC_USE_MOCKS=false" >> .env.local
+npm run dev -- --port 3001
 ```
 
 ---
@@ -79,7 +82,7 @@ Progress note (2026-02-15): added `backend/src/spikes/functionUrlSpike.ts`, vali
 - [x] `npm init -y`
 - [x] Install deps:
   ```bash
-  npm i @aws-sdk/client-lambda @aws-sdk/client-s3 @aws-sdk/client-iam dotenv archiver lambda-multipart-parser
+  npm i @aws-sdk/client-lambda @aws-sdk/client-s3 @aws-sdk/client-iam dotenv archiver busboy
   npm i -D @types/node @types/aws-lambda typescript ts-node esbuild
   ```
 - [x] Create `tsconfig.json` (or use `npx tsc --init`)
@@ -142,22 +145,25 @@ Progress note (2026-02-15): implemented `backend/src/deploy.ts` + wired `POST /d
 - **Time estimate:** 45 min
 
 Progress note (2026-02-15): implemented `backend/src/s3Upload.ts` and wired `/upload` in Lambda handler; manual multipart upload returned S3 URL and object existence verified via `aws s3 ls`.
+Progress note (2026-02-15): replaced `lambda-multipart-parser` with direct `busboy` parsing in `backend/src/handler.ts` to remove high-severity transitive vulnerability (`dicer`/old `busboy`).
 
 **Shortcut:** If S3 upload is too slow, skip it for MVP. Hardcode one sample context file in Lambda.
 
 ---
 
 #### Task 1.4: Test backend manually
-- [ ] Use Postman/curl to test `/deploy` with sample Lambda code:
+- [x] Use Postman/curl to test `/deploy` with sample Lambda code:
   ```javascript
-  exports.handler = async (event) => {
+  export const handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ message: "Hello from Lambda!" }) };
   };
   ```
-- [ ] Verify Lambda created in AWS console
-- [ ] Verify function URL works: `curl https://abc123.lambda-url.../ -X POST -d '{}'`
-- [ ] Test `/upload` endpoint with a .txt file
+- [x] Verify Lambda created in AWS console
+- [x] Verify function URL works: `curl https://abc123.lambda-url.../ -X POST -d '{}'`
+- [x] Test `/upload` endpoint with a .txt file
 - **Time estimate:** 30 min
+
+Progress note (2026-02-15): validated `/health`, `/upload`, and `/deploy` through `sam local start-api` with curl; deployed function `ai-lambda-user-013fffd6` and confirmed direct invoke + function URL invoke in `eu-central-1`. Observed short post-create Function URL propagation delay before first successful response.
 
 ---
 
@@ -169,26 +175,34 @@ Progress note (2026-02-15): implemented `backend/src/s3Upload.ts` and wired `/up
 - [x] Smoke test Lambda handler with `sam local invoke`
 - **Time estimate:** 45 min
 
+Progress note (2026-02-15): fixed SAM build pipeline regressions so `sam validate --lint` and `sam build` pass again (removed reserved `AWS_REGION` env var from template globals and ensured `esbuild` is available to SAM builder).
+Progress note (2026-02-15): re-verified backend endpoints via `sam local start-api` (`/health`, `/upload`, `/deploy`) and confirmed real AWS deploy + Function URL invocation + cleanup.
+
 ---
 
-### **PHASE 2: Frontend - Editor + Deploy UI** (~3-4 hours)
+### **PHASE 2: Frontend - Next.js UI + Deploy Flow** (~3-4 hours)
 
-#### Task 2.1: Set up React project
-- [ ] `cd ~/your-project && npx create-react-app frontend --template typescript`
-- [ ] `cd frontend && npm i @monaco-editor/react axios`
-- [ ] Clean up boilerplate (`App.tsx`, remove default content)
-- [ ] Test: `npm start` → see blank page
+#### Task 2.1: Set up Next.js project
+- [x] `cd ~/your-project && npx create-next-app@latest frontend --ts --tailwind --eslint --app --src-dir=false --import-alias "@/*"`
+- [x] `cd frontend && npm i @monaco-editor/react msw`
+- [x] Initialize shadcn/ui and add core components (`button`, `input`, `card`, `badge`, `alert`, `switch`, `sonner`)
+- [x] Add `.env.local` defaults:
+  - `NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:3000`
+  - `NEXT_PUBLIC_USE_MOCKS=false`
+- [x] Test: `npm run dev -- --port 3001`
 - **Time estimate:** 15 min
+Progress note (2026-02-15): initialized Next.js app with Tailwind + shadcn/ui, installed Monaco + MSW, and added `.env.local` defaults for SAM local backend + mock toggle.
 
 ---
 
 #### Task 2.2: Build Monaco editor component
-- [ ] Create `src/components/Editor.tsx`
-- [ ] Use `@monaco-editor/react`:
+- [x] Create `components/editor.tsx` as a client component
+- [x] Use dynamic import with `ssr: false` to avoid server-render issues
+- [x] Use `@monaco-editor/react`:
   ```tsx
   import Editor from '@monaco-editor/react';
   
-  export default function CodeEditor({ value, onChange }) {
+  export default function CodeEditor({ value, onChange }: Props) {
     return (
       <Editor
         height="60vh"
@@ -200,31 +214,31 @@ Progress note (2026-02-15): implemented `backend/src/s3Upload.ts` and wired `/up
     );
   }
   ```
-- [ ] Test: Import in `App.tsx`, render editor, verify it works
+- [x] Test: Import in `app/page.tsx`, render editor, verify it works
 - **Time estimate:** 30 min
 
 ---
 
 #### Task 2.3: Chat-only template wiring
-- [ ] Set default editor content to Chat Completion template on app load
-- [ ] Remove selector dependency for MVP path (or hide it behind a feature flag)
-- [ ] Show small UI label: "MVP: Chat Completion with Context"
+- [x] Set default editor content to Chat Completion template on app load
+- [x] Remove selector dependency for MVP path (or hide it behind a feature flag)
+- [x] Show small UI label: "MVP: Chat Completion with Context"
 - **Time estimate:** 15 min
 
 ---
 
 #### Task 2.4: Create Lambda templates ⭐ **IMPORTANT**
 Create files:
-- [ ] `frontend/src/templates/chatCompletion.ts`
-- [ ] `frontend/src/templates/index.ts` exports chat template
+- [x] `frontend/templates/chatCompletion.ts`
+- [x] `frontend/templates/index.ts` exports chat template
 
 Template requirements checklist:
-- [ ] Chat template is a string containing a Lambda handler
-- [ ] Parse `event.body` safely (`{}` fallback)
-- [ ] Return JSON `{ statusCode, headers, body }`
-- [ ] Use `process.env.OPENAI_API_KEY`
-- [ ] `chatCompletion`: optionally read `process.env.S3_CONTEXT_FILES` and include context in system prompt
-- [ ] Catch errors and return status `500` with user-readable error message
+- [x] Chat template is a string containing a Lambda handler
+- [x] Parse `event.body` safely (`{}` fallback)
+- [x] Return JSON `{ statusCode, headers, body }`
+- [x] Use `process.env.OPENAI_API_KEY`
+- [x] `chatCompletion`: optionally read `process.env.S3_CONTEXT_FILES` and include context in system prompt
+- [x] Catch errors and return status `500` with user-readable error message
 
 - **Time estimate:** 45 min
 
@@ -233,11 +247,12 @@ Template requirements checklist:
 ---
 
 #### Task 2.5: Build file upload component
-- [ ] Create `src/components/FileUpload.tsx`
-- [ ] Drag-and-drop or file input
-- [ ] On file select → call backend `/upload` → store returned S3 URLs
-- [ ] Show uploaded file names below input
-- [ ] Show this component in MVP flow (chat-only mode)
+- [x] Create `components/file-upload.tsx`
+- [x] Use file input (drag-and-drop optional)
+- [x] On file select, auto-upload immediately to backend `/upload`
+- [x] Store returned S3 URLs in parent state
+- [x] Show uploaded file names below input
+- [x] Show this component in MVP flow (chat-only mode)
 - **Time estimate:** 30 min
 
 **Shortcut:** Skip drag-and-drop, just use `<input type="file" />`.
@@ -245,8 +260,8 @@ Template requirements checklist:
 ---
 
 #### Task 2.6: Build deploy button
-- [ ] Create `src/components/DeployButton.tsx`
-- [ ] On click:
+- [x] Create `components/deploy-panel.tsx`
+- [x] On click:
   1. Get code from editor state
   2. Get OpenAI API key from input field
   3. Get S3 file URLs (if any)
@@ -254,28 +269,32 @@ Template requirements checklist:
   5. Show loading spinner
   6. On success → display function URL + curl example
   7. On error → show error message
+- [x] Disable deploy when API key/code is missing or upload is in progress
 - **Time estimate:** 30 min
 
 ---
 
 #### Task 2.7: Build UI layout
-- [ ] Wire everything in `src/App.tsx`:
-  - Header: "AI Lambda Builder"
+- [x] Wire everything in `app/page.tsx`:
+  - Header: "AI Lambda Forger"
   - Chat-only MVP label ("Chat Completion with Context")
+  - Backend health status badge from `GET /health`
   - OpenAI API key input (text input, type="password")
   - File upload component
-  - Monaco editor (60% height)
+  - Monaco editor (60% height, right pane)
   - Deploy button
   - Result section (function URL + curl example, only shown after deploy)
-  
-- [ ] Basic CSS (can be minimal, just make it readable)
+- [x] Desktop layout: side-by-side (controls left, editor right)
+- [x] Mobile layout: single-column stacked
+- [x] Tailwind + shadcn theming aligned to Forge/Builder brand direction
 - **Time estimate:** 45 min
 
 ---
 
 #### Task 2.8: Wire everything together ⭐ **INTEGRATION**
-- [ ] Connect editor onChange → save code to state
-- [ ] Connect deploy button → backend API call
+- [x] Connect editor onChange → save code to state
+- [x] Connect deploy button → backend API call
+- [x] Keep backend URL env-driven only (`NEXT_PUBLIC_BACKEND_BASE_URL`)
 - [ ] Test full flow:
   1. Chat template is loaded by default
   2. Upload a .txt file
@@ -283,6 +302,16 @@ Template requirements checklist:
   4. Click deploy
   5. Verify function URL returned
   6. Curl the URL → get AI response
+- **Time estimate:** 30 min
+Progress note (2026-02-15): wired frontend to real backend contract (`/health`, `/upload`, `/deploy`) with typed fetch client, timeout/error handling, and deploy result/copy actions.
+
+---
+
+#### Task 2.9: Add MSW mock mode (frontend-only testing)
+- [x] Configure MSW handlers for `/health`, `/upload`, `/deploy`
+- [x] Guard with env-only toggle: `NEXT_PUBLIC_USE_MOCKS=true`
+- [x] Keep toggle hidden from UI (no runtime switch control in app)
+- [x] Add realistic mock latency + error scenarios for UX validation
 - **Time estimate:** 30 min
 
 ---
@@ -298,18 +327,18 @@ Template requirements checklist:
 ---
 
 #### Task 3.2: Basic error handling
-- [ ] Backend: Catch Lambda creation errors → return friendly message
-- [ ] Frontend: Show error toast/message if deploy fails
-- [ ] Handle: missing API key, invalid code, AWS quota limits
+- [x] Backend: Catch Lambda creation errors → return friendly message
+- [x] Frontend: Show error toast/message if deploy fails
+- [x] Handle: missing API key, invalid code, AWS quota limits
 - **Time estimate:** 30 min
 
 ---
 
 #### Task 3.3: Minimal styling
-- [ ] Clean layout (flexbox or grid)
-- [ ] Loading spinner for deploy button
-- [ ] Success/error message styling
-- [ ] Make it not look like total garbage (but perfection not needed)
+- [x] Clean layout (flexbox or grid)
+- [x] Loading spinner for deploy button
+- [x] Success/error message styling
+- [x] Make it not look like total garbage (but perfection not needed)
 - **Time estimate:** 15 min
 
 ---
@@ -339,6 +368,8 @@ SPIKE 1 → Task 1.2 (Deploy endpoint) ← MUST FINISH FIRST
 Task 2.4 (Templates) → Task 2.2 (Editor) → Task 2.8 (Integration)
           ↓
 Task 1.3 (S3 upload) → Task 2.5 (File upload) → Task 2.8
+          ↓
+Task 2.9 (MSW mode) → Task 2.8 (Integration confidence)
           ↓
 Task 1.2 + Task 2.8 → Task 3.1 (E2E test)
 ```
@@ -388,9 +419,10 @@ This plan is complete when all DoD checks pass in a manual end-to-end run.
 2. **Task 1.1** (15 min) → Set up backend
 3. **Task 1.2** (2-3 hours) → Build deploy endpoint (HARDEST PART)
 4. **Task 2.1-2.4** (parallel if needed) → Frontend setup + templates
-5. **Task 2.8** (30 min) → Wire frontend + backend together
-6. **Task 3.1** (45 min) → Test end-to-end
-7. **Ship it** 🚢
+5. **Task 2.9** (30 min) → Add mock mode for UI iteration
+6. **Task 2.8** (30 min) → Wire frontend + backend together
+7. **Task 3.1** (45 min) → Test end-to-end
+8. **Ship it** 🚢
 
 ---
 

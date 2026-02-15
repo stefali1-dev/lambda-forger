@@ -55,6 +55,30 @@ interface DeployOptions {
   roleArnOverride?: string;
 }
 
+function validateUserCode(code: string): void {
+  const trimmed = code.trim();
+  if (!trimmed) {
+    throw new Error('`code` is required and must be a non-empty string.');
+  }
+
+  // MVP template contract uses ESM handlers (`export const handler = ...`).
+  const hasEsmHandlerExport =
+    /\bexport\s+(async\s+)?function\s+handler\b/.test(trimmed) ||
+    /\bexport\s+const\s+handler\b/.test(trimmed);
+  const looksLikeCommonJs =
+    /\bmodule\.exports\b/.test(trimmed) || /\bexports\.handler\b/.test(trimmed);
+
+  if (!hasEsmHandlerExport) {
+    if (looksLikeCommonJs) {
+      throw new Error(
+        'Code must export `handler` using ESM syntax for MVP (for example: `export const handler = async (event) => { ... }`).',
+      );
+    }
+
+    throw new Error('Code must export a `handler` function (ESM) to deploy.');
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -113,12 +137,17 @@ async function ensureExecutionRole(iamClient: IAMClient): Promise<string> {
 }
 
 async function buildDeploymentBundle(code: string): Promise<Buffer> {
+  validateUserCode(code);
+
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'lambda-deploy-'));
-  const zipPath = path.join(tempRoot, 'bundle.zip');
+  const zipPath = path.join(tmpdir(), `lambda-deploy-bundle-${randomUUID()}.zip`);
+  const needsOpenAiDependency =
+    /from\s+['"]openai['"]/.test(code) ||
+    /require\(\s*['"]openai['"]\s*\)/.test(code) ||
+    /import\s*\(\s*['"]openai['"]\s*\)/.test(code);
 
   try {
     await writeFile(path.join(tempRoot, 'handler.js'), code, 'utf8');
-
     await writeFile(
       path.join(tempRoot, 'package.json'),
       JSON.stringify(
@@ -126,10 +155,8 @@ async function buildDeploymentBundle(code: string): Promise<Buffer> {
           name: 'ai-lambda-runtime',
           version: '1.0.0',
           private: true,
-          type: 'commonjs',
-          dependencies: {
-            openai: '^5.22.0',
-          },
+          type: 'module',
+          ...(needsOpenAiDependency ? { dependencies: { openai: '^5.22.0' } } : {}),
         },
         null,
         2,
@@ -137,15 +164,24 @@ async function buildDeploymentBundle(code: string): Promise<Buffer> {
       'utf8',
     );
 
-    await execFileAsync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], {
-      cwd: tempRoot,
-      env: process.env,
-    });
+    if (needsOpenAiDependency) {
+      try {
+        await execFileAsync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], {
+          cwd: tempRoot,
+          env: process.env,
+        });
+      } catch (error) {
+        throw new Error(
+          'Failed to install runtime dependency `openai` while packaging Lambda code. Verify outbound network/NPM registry access from the backend runtime or remove `openai` imports from the function code.',
+        );
+      }
+    }
 
     await zipDirectory(tempRoot, zipPath);
     return await readFile(zipPath);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
+    await rm(zipPath, { force: true });
   }
 }
 

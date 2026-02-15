@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import dotenv from 'dotenv';
-import multipart from 'lambda-multipart-parser';
+import busboy from 'busboy';
 import { deployLambda, DeployPayload } from './deploy';
-import { uploadContextFiles } from './s3Upload';
+import { UploadedFileInput, uploadContextFiles } from './s3Upload';
 
 dotenv.config();
 
@@ -115,21 +115,14 @@ async function handleDeploy(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
 
 async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   try {
-    const parsed = await multipart.parse(event as any);
-    const files = parsed.files || [];
+    const files = await parseMultipartFiles(event);
 
     if (files.length === 0) {
       return badRequest('No files uploaded. Use multipart/form-data with field `files`.');
     }
 
     const result = await uploadContextFiles(
-      files.map((file) => ({
-        originalname: file.filename || 'upload.txt',
-        buffer: Buffer.isBuffer(file.content)
-          ? file.content
-          : Buffer.from(file.content as string, 'binary'),
-        mimetype: file.contentType || 'text/plain',
-      })),
+      files,
       {
         region: DEPLOY_TARGET_REGION,
       },
@@ -140,6 +133,64 @@ async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
     const message = error instanceof Error ? error.message : 'Unknown upload error.';
     return internalError(message);
   }
+}
+
+function getHeaderValue(headers: APIGatewayProxyEventV2['headers'], name: string): string | undefined {
+  const direct = headers?.[name];
+  if (direct) {
+    return direct;
+  }
+
+  const lowerName = name.toLowerCase();
+  const entry = Object.entries(headers || {}).find(([key]) => key.toLowerCase() === lowerName);
+  return entry?.[1];
+}
+
+function decodeBodyBuffer(event: APIGatewayProxyEventV2): Buffer {
+  if (!event.body) {
+    return Buffer.alloc(0);
+  }
+
+  return event.isBase64Encoded ? Buffer.from(event.body, 'base64') : Buffer.from(event.body, 'utf8');
+}
+
+async function parseMultipartFiles(event: APIGatewayProxyEventV2): Promise<UploadedFileInput[]> {
+  const contentType = getHeaderValue(event.headers, 'content-type');
+  if (!contentType || !contentType.toLowerCase().includes('multipart/form-data')) {
+    throw new Error('Content-Type must be multipart/form-data.');
+  }
+
+  const body = decodeBodyBuffer(event);
+  if (body.length === 0) {
+    return [];
+  }
+
+  return await new Promise<UploadedFileInput[]>((resolve, reject) => {
+    const parsedFiles: UploadedFileInput[] = [];
+    const parser = busboy({
+      headers: {
+        'content-type': contentType,
+      },
+    });
+
+    parser.on('file', (_, stream, info) => {
+      const chunks: Buffer[] = [];
+
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('error', reject);
+      stream.on('end', () => {
+        parsedFiles.push({
+          originalname: info.filename || 'upload.txt',
+          buffer: Buffer.concat(chunks),
+          mimetype: info.mimeType || 'application/octet-stream',
+        });
+      });
+    });
+
+    parser.on('error', reject);
+    parser.on('finish', () => resolve(parsedFiles));
+    parser.end(body);
+  });
 }
 
 export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {

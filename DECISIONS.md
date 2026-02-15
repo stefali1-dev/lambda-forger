@@ -1,6 +1,6 @@
 # DECISIONS.md - Architecture Decisions & Blockers
 
-**Project:** AI Lambda Builder MVP  
+**Project:** AI Lambda Forger MVP  
 **Started:** 2026-02-15  
 **Purpose:** Track key decisions, blockers, and why we chose certain approaches
 
@@ -282,6 +282,155 @@
 
 ---
 
+### Decision 15: Deployed user handler contract is ESM-only for MVP
+**Date:** 2026-02-15  
+**Context:** Deployment flow accepted mixed handler styles, but runtime behavior was inconsistent when users submitted CommonJS samples (`exports.handler`) while docs and frontend templates target ESM.
+
+**Chosen:**
+1. Enforce ESM handler export in deploy validation (`export const handler` or `export function handler`)
+2. Return explicit client error for CommonJS-style handler code
+3. Package deployed function with `package.json` set to `"type": "module"`
+
+**Why:**
+- Matches documented template contract
+- Avoids ambiguous runtime behavior and hard-to-debug invocation failures
+- Keeps deploy path deterministic for chat-only MVP
+
+**Trade-offs:**
+- CommonJS user snippets now fail validation and require conversion
+- Slightly stricter payload contract in `/deploy`
+
+---
+
+### Decision 16: Install `openai` dependency only when user code imports it
+**Date:** 2026-02-15  
+**Context:** Deploy smoke runs with non-OpenAI sample handlers were slowed or blocked by unnecessary dependency install during packaging.
+
+**Chosen:**
+1. Always write `package.json` with `"type": "module"` for runtime consistency
+2. Run `npm install` only when code imports `openai`
+3. Return clearer packaging error message when dependency installation fails
+
+**Why:**
+- Faster deploy loop for generic smoke handlers
+- Fewer packaging failures unrelated to user code behavior
+- Keeps OpenAI SDK available for actual chat template handlers
+
+**Trade-offs:**
+- Simple regex-based import detection can miss unusual dynamic-loading patterns
+- Runtime dependency behavior now depends on handler code content
+
+---
+
+### Decision 17: SAM template/build compatibility is a release gate for backend MVP
+**Date:** 2026-02-15  
+**Context:** Backend route tests and live AWS deploys were passing, but SAM workflow had drifted: `sam validate --lint` failed due to reserved env var use and `sam build` failed because `esbuild` was only in dev dependencies.
+
+**Chosen:**
+1. Remove reserved `AWS_REGION` env var override from `backend/template.yaml`
+2. Keep `BuildMethod: esbuild` and make `esbuild` a regular dependency so SAM builder can always resolve it
+3. Treat passing `sam validate --lint` + `sam build` as required backend readiness checks
+
+**Why:**
+- Restores documented local/deploy runbook behavior
+- Prevents shipping a backend that only works via direct `dist/` execution paths
+- Keeps infra-as-code aligned with actual runtime behavior
+
+**Trade-offs:**
+- Slightly larger dependency footprint in backend package
+- SAM lint/build checks add a bit of verification time per iteration
+
+---
+
+### Decision 18: Replace `lambda-multipart-parser` with `busboy` for upload parsing
+**Date:** 2026-02-15  
+**Context:** `npm audit --omit=dev` reported high-severity issues via `lambda-multipart-parser` transitive dependencies (`dicer`/legacy `busboy`) with no available patch upgrade.
+
+**Chosen:**
+1. Remove `lambda-multipart-parser` from backend dependencies
+2. Parse multipart uploads directly with maintained `busboy` in `backend/src/handler.ts`
+3. Keep `/upload` API contract unchanged
+
+**Why:**
+- Eliminates known high-severity dependency findings in backend runtime
+- Maintains control over multipart parsing behavior and error handling
+- Keeps MVP feature set unchanged while improving security posture
+
+**Trade-offs:**
+- Slightly more custom parsing code in handler
+- Multipart parser maintenance is now our responsibility
+
+---
+
+### Decision 19: Frontend foundation = Next.js + Tailwind + shadcn/ui + native fetch
+**Date:** 2026-02-15  
+**Context:** Frontend implementation had not started; initial plan referenced CRA + axios. We needed a durable foundation with fast delivery and long-term component consistency.
+
+**Chosen:**
+1. Use a fresh Next.js app (App Router + TypeScript) for `frontend/`
+2. Use Tailwind CSS + shadcn/ui primitives from day one
+3. Use native `fetch` with a typed API helper instead of `axios`
+4. Keep backend URL env-driven only via `NEXT_PUBLIC_BACKEND_BASE_URL` (default `http://127.0.0.1:3000`)
+
+**Why:**
+- Next.js gives better long-term structure without slowing MVP delivery
+- Tailwind + shadcn/ui enables fast, consistent UI assembly with future extensibility
+- Native fetch keeps dependency footprint smaller and is sufficient for JSON + multipart flows
+- Env-only backend routing keeps UI simple and avoids config drift in demos/tests
+
+**Trade-offs:**
+- Slightly higher initial setup overhead than plain CRA
+- shadcn introduces generator/setup steps and component ownership in-repo
+- No runtime backend URL switch in UI (intentional for MVP simplicity)
+
+---
+
+### Decision 20: Frontend mock strategy = MSW behind env toggle (no UI switch)
+**Date:** 2026-02-15  
+**Context:** Need to test UI freely without relying on live SAM/AWS endpoints during frontend development.
+
+**Chosen:**
+1. Use MSW to mock `/health`, `/upload`, and `/deploy`
+2. Enable mocks only when `NEXT_PUBLIC_USE_MOCKS=true`
+3. Keep mock toggle env-only (do not expose a UI toggle)
+4. Keep mock payloads contract-compatible with backend response shapes
+
+**Why:**
+- Fast UI iteration and deterministic failure/success scenario testing
+- Lower operational overhead than running separate mock servers (for example WireMock)
+- Prevents accidental mock usage in normal flows by requiring explicit env opt-in
+
+**Trade-offs:**
+- Requires discipline to keep MSW handlers synced with backend contract changes
+- Adds one more code path to validate before release
+
+---
+
+### Decision 21: Brand direction = "AI Lambda Forger" (Forge/Builder identity)
+**Date:** 2026-02-15  
+**Context:** Product needed consistent naming and UI tone aligned to frontend-developer positioning.
+
+**Chosen:**
+1. Brand name: `AI Lambda Forger`
+2. Direction: Forge/Builder visual language (developer-tool feel, practical copy)
+3. Layout UX baseline:
+   - Desktop side-by-side (controls left, editor/results right)
+   - Mobile stacked single column
+4. Interaction defaults:
+   - Context file upload starts immediately on file selection
+   - Backend URL and mock mode are env-only controls (no UI toggles)
+
+**Why:**
+- Reinforces "build and ship quickly" promise for frontend developers
+- Keeps UI focused on deploy workflow rather than settings complexity
+- Aligns visual/system choices with long-term product identity from MVP day one
+
+**Trade-offs:**
+- Less end-user configurability in the UI during MVP
+- Brand refinements may still evolve after first user feedback
+
+---
+
 ## Open Questions / Blockers
 
 ### Blocker 1: IAM Role Creation Strategy
@@ -339,6 +488,17 @@
 
 ---
 
+### Blocker 6: Immediate Function URL readiness can lag right after deploy
+**Status:** ✅ OBSERVED / MITIGATED  
+**Concern:** First invoke to a newly-created Function URL may return timeout even when direct `Invoke` succeeds and function is healthy.
+
+**Mitigation:**
+1. Treat first few seconds after URL creation as propagation window
+2. Verify with one or more retries before considering deploy failed
+3. Use direct `aws lambda invoke` + CloudWatch logs to separate runtime errors from URL propagation effects
+
+---
+
 ## Future Decisions (Post-MVP)
 
 **1. Pricing Model**
@@ -376,4 +536,4 @@
 
 ---
 
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-15 20:15 EET

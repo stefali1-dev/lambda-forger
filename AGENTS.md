@@ -1,6 +1,6 @@
 # AGENTS.md - Context for AI Coding Agents
 
-**Project:** AI Lambda Builder MVP  
+**Project:** AI Lambda Forger MVP  
 **Goal:** Ship a working prototype TODAY (Feb 15, 2026)  
 **Time Budget:** 8-10 hours
 
@@ -48,22 +48,27 @@ See `PLAN.md` for the complete TODO list, spikes, and task breakdown.
 ## 🏗️ Project Structure
 
 ```
-ai-lambda-builder/
+ai-lambda-forger/
 ├── PLAN.md              # Master TODO list (READ THIS FIRST)
 ├── AGENTS.md            # This file (context for AI agents)
 ├── DECISIONS.md         # Architecture decisions & blockers (create as needed)
-├── frontend/            # React + TypeScript app
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Editor.tsx          # Monaco editor wrapper
-│   │   │   ├── TemplateSelector.tsx # optional/post-MVP
-│   │   │   ├── FileUpload.tsx
-│   │   │   └── DeployButton.tsx
-│   │   ├── templates/              # Lambda code templates (as strings)
-│   │   │   ├── chatCompletion.ts
-│   │   │   ├── streamingChat.ts    # post-MVP
-│   │   │   └── imageGeneration.ts  # post-MVP
-│   │   └── App.tsx
+├── frontend/            # Next.js + TypeScript app (App Router)
+│   ├── app/
+│   │   ├── page.tsx                # Main UI layout + state wiring
+│   │   ├── layout.tsx              # Root layout + fonts/theme
+│   │   └── globals.css             # Tailwind base + theme variables
+│   ├── components/
+│   │   ├── editor.tsx              # Monaco editor wrapper (client component)
+│   │   ├── file-upload.tsx
+│   │   └── deploy-panel.tsx
+│   ├── components/ui/              # shadcn/ui primitives
+│   ├── lib/
+│   │   ├── api.ts                  # typed fetch client
+│   │   └── utils.ts
+│   ├── templates/
+│   │   ├── chatCompletion.ts
+│   │   └── index.ts
+│   ├── mocks/                      # MSW handlers + browser setup (dev only)
 │   └── package.json
 ├── backend/             # AWS SAM backend (Lambda + TypeScript)
 │   ├── src/
@@ -80,15 +85,19 @@ ai-lambda-builder/
 ## 🔧 Tech Stack
 
 **Frontend:**
-- React + TypeScript (created via `create-react-app`)
+- Next.js (App Router) + TypeScript
+- Tailwind CSS
+- shadcn/ui (selected component primitives only)
 - `@monaco-editor/react` (VS Code editor in browser)
-- `axios` (API calls to backend)
+- native `fetch` with a thin typed API client wrapper
+- MSW (mock backend mode in frontend dev/testing)
 
 **Backend:**
 - AWS Lambda (Node.js + TypeScript) deployed with AWS SAM
 - `@aws-sdk/client-lambda` (create Lambda functions)
 - `@aws-sdk/client-s3` (upload context files)
 - `@aws-sdk/client-iam` (create execution role if needed)
+- `busboy` (multipart/form-data parsing for `/upload`)
 
 **AWS Resources We Create:**
 - Lambda Function (Node.js 22.x runtime)
@@ -140,7 +149,7 @@ ai-lambda-builder/
 - Research: https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html
 
 **2. Lambda Deployment Package**
-- Must zip: user code + `node_modules` (openai package)
+- Must zip: user code + required `node_modules` dependencies (`openai` when template/user code imports it)
 - Use `archiver` npm package or `AdmZip`
 - Include `package.json` with `"type": "module"` if using ES modules
 - **Blocker:** Bundling dependencies — may need esbuild/webpack
@@ -165,10 +174,40 @@ ai-lambda-builder/
 ## 🧠 Key Architectural Decisions
 
 Canonical decisions live in `DECISIONS.md`. Current MVP decisions:
-- Bundle strategy: zip user code + `node_modules` (no esbuild for MVP)
+- User-function bundle strategy: zip user code + required runtime `node_modules` (no esbuild for deployed user Lambdas in MVP)
+- Backend control-plane bundle strategy: SAM `BuildMethod: esbuild` for `backend/src/handler.ts`
 - Context storage: S3 (not Lambda `/tmp`)
 - OpenAI key handling: user-provided key passed as Lambda env var
+- Frontend stack: Next.js + Tailwind + shadcn/ui
+- Frontend mock mode: MSW behind env toggle (env-only, no UI toggle)
 - Agent mode: autonomous, proactive, clear/direct communication
+
+---
+
+## 🎨 Brand & UX Direction
+
+**Brand name:** `AI Lambda Forger`  
+**Tagline:** "From static site to context-aware chatbot endpoint in minutes."
+
+**UI intent (MVP):**
+- Developer-first, practical copy (`endpoint`, `curl`, `deploy`, `context files`)
+- Desktop-first side-by-side layout:
+  - Left panel: API key, file upload, deploy controls
+  - Right panel: Monaco editor + deployment result card
+- Mobile: stacked single-column layout
+
+**UX flow (canonical):**
+1. Load default chat template in Monaco.
+2. Check backend health (`GET /health`) and show status.
+3. User pastes OpenAI API key.
+4. User selects context files; uploads start immediately (`POST /upload`).
+5. User deploys (`POST /deploy`) with editor code + key + uploaded `s3Urls`.
+6. On success show function URL + curl command with copy actions.
+7. On failure show actionable, user-facing error text.
+
+**Frontend environment defaults:**
+- `NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:3000` (SAM local API)
+- `NEXT_PUBLIC_USE_MOCKS=false` (set `true` to enable MSW)
 
 ---
 
@@ -177,12 +216,12 @@ Canonical decisions live in `DECISIONS.md`. Current MVP decisions:
 Each template is a **self-contained Lambda handler** (TypeScript/JavaScript code as a string).
 
 Templates should live in:
-- `frontend/src/templates/chatCompletion.ts`
-- `frontend/src/templates/index.ts`
+- `frontend/templates/chatCompletion.ts`
+- `frontend/templates/index.ts`
 
 Deferred template files (post-MVP):
-- `frontend/src/templates/streamingChat.ts`
-- `frontend/src/templates/imageGeneration.ts`
+- `frontend/templates/streamingChat.ts`
+- `frontend/templates/imageGeneration.ts`
 
 **Key points:**
 - OpenAI API key passed as `process.env.OPENAI_API_KEY`
@@ -309,18 +348,24 @@ DEPLOY_TARGET_REGION=eu-central-1
 npm run typecheck
 # Build TS:
 npm run build
+# Validate + build SAM artifacts:
+sam validate --lint --template-file template.yaml
+sam build
 # Run backend locally with SAM:
 sam local start-api
 # Deploy backend Lambda/API:
-sam build && sam deploy --guided
+sam deploy --guided
 ```
 
 ### Frontend
 ```bash
 cd frontend
 npm install
-# Update API endpoint in src/config.ts (if needed)
-npm start  # starts React app on http://localhost:3000
+# .env.local defaults
+NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:3000
+NEXT_PUBLIC_USE_MOCKS=false
+# run Next.js frontend (use port 3001 to avoid SAM API conflict)
+npm run dev -- --port 3001
 ```
 
 ---
@@ -408,5 +453,5 @@ Use this as the canonical Definition of Done:
 
 ---
 
-**Last Updated:** 2026-02-15 14:48 GMT+2  
-**Status:** Chat-only MVP active. Start with SPIKE 1 in PLAN.md.
+**Last Updated:** 2026-02-15 20:15 GMT+2  
+**Status:** Chat-only MVP active. Backend implemented; frontend moving to Next.js + Tailwind + shadcn/ui + MSW.
