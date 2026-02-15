@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AI Lambda Builder backend API (SAM + Node.js + TypeScript)
+Description: AI Lambda Forger backend API (SAM + Node.js + TypeScript)
 
 Parameters:
   DeployTargetRegion:
@@ -18,7 +18,7 @@ Globals:
     Environment:
       Variables:
         DEPLOY_TARGET_REGION: !Ref DeployTargetRegion
-        MVP_LAMBDA_ROLE_NAME: ai-lambda-builder-mvp-role
+        MVP_LAMBDA_ROLE_NAME: ai-lambda-forger-mvp-role
         S3_CONTEXT_BUCKET: ai-lambda-mvp-873550638583-euc1
 
 Resources:

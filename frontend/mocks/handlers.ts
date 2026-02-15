@@ -10,7 +10,7 @@ interface DeployPayload {
 export const handlers = [
   http.get("*/health", async () => {
     await delay(250);
-    return HttpResponse.json({ ok: true, service: "ai-lambda-builder-backend" });
+    return HttpResponse.json({ ok: true, service: "ai-lambda-forger-backend" });
   }),
 
   http.post("*/upload", async ({ request }) => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { Loader2, Upload } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -15,30 +16,51 @@ interface FileUploadProps {
   uploadedFiles: UploadedFile[];
   onUpload: (files: File[]) => Promise<void>;
   disabled?: boolean;
+  workspace?: boolean;
 }
 
-export function FileUpload({ uploadedFiles, onUpload, disabled }: FileUploadProps) {
+export function FileUpload({ uploadedFiles, onUpload, disabled, workspace = false }: FileUploadProps) {
   const hasFiles = uploadedFiles.length > 0;
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const cardClass = workspace ? "border-slate-700 bg-slate-900/90 text-slate-100" : "border-border/70 bg-card/70";
+  const dropzoneClass = workspace
+    ? "rounded-lg border border-dashed border-cyan-500/40 bg-cyan-950/20 p-3 text-sm"
+    : "rounded-lg border border-dashed border-cyan-700/50 bg-cyan-950/10 p-3 text-sm";
+  const selectButtonClass = workspace
+    ? "border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-slate-100"
+    : "border-slate-300 bg-white text-slate-900 hover:bg-slate-100";
+  const fileItemClass = workspace
+    ? "rounded-md border border-slate-700 bg-slate-950/80 p-2"
+    : "rounded-md border border-border/70 bg-background/40 p-2";
+  const fileMetaClass = workspace ? "truncate font-mono text-[11px] text-slate-300" : "truncate font-mono text-[11px] text-muted-foreground";
 
   return (
-    <Card className="border-border/70 bg-card/70">
+    <Card className={cardClass}>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-semibold">Context Files</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <label
-          htmlFor="context-files"
-          className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-cyan-700/50 bg-cyan-950/10 p-3 text-sm hover:bg-cyan-950/20"
-        >
-          <span className="text-muted-foreground">Upload .txt, .md, .json, or .csv files</span>
-          <Button type="button" size="sm" variant="outline" disabled={disabled}>
+        <div className={`flex items-center justify-between gap-3 ${dropzoneClass}`}>
+          <span className={workspace ? "text-slate-300" : "text-muted-foreground"}>
+            Upload .txt, .md, .json, or .csv files
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={selectButtonClass}
+            disabled={disabled}
+            onClick={() => inputRef.current?.click()}
+          >
             {disabled ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
             {disabled ? "Uploading" : "Select Files"}
           </Button>
-        </label>
+        </div>
 
         <input
-          id="context-files"
+          ref={inputRef}
+          id={workspace ? "workspace-context-files" : "context-files"}
           className="hidden"
           type="file"
           multiple
@@ -57,9 +79,9 @@ export function FileUpload({ uploadedFiles, onUpload, disabled }: FileUploadProp
         {hasFiles ? (
           <div className="space-y-2">
             {uploadedFiles.map((file) => (
-              <div key={file.s3Url} className="rounded-md border border-border/70 bg-background/40 p-2">
+              <div key={file.s3Url} className={fileItemClass}>
                 <p className="truncate text-xs font-medium">{file.name}</p>
-                <p className="truncate font-mono text-[11px] text-muted-foreground">{file.s3Url}</p>
+                <p className={fileMetaClass}>{file.s3Url}</p>
               </div>
             ))}
           </div>

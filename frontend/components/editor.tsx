@@ -28,6 +28,10 @@ export function Editor({ value, onChange, height = "58vh" }: EditorProps) {
       strict: false,
       noEmit: true,
     });
+    monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: true,
+      noSyntaxValidation: false,
+    });
 
     monaco.languages.typescript.typescriptDefaults.addExtraLib(
       `

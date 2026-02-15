@@ -1,34 +1,38 @@
-# AI Lambda Forger (MVP)
+# AI Lambda Forger
 
-MVP for deploying context-aware OpenAI AWS Lambda endpoints from a frontend-first workflow.
+Frontend-first tool to deploy context-aware OpenAI Lambda endpoints quickly.
 
-## Current Scope
+## Status
+- MVP v1: completed.
+- MVP v2: active (multi-file deploy parity, system prompt UX, template roadmap affordance, full real E2E hardening).
 
-- Backend control plane implemented in `backend/` (AWS SAM + Lambda)
-- Endpoints implemented:
-  - `GET /health`
-  - `POST /upload`
-  - `POST /deploy`
-- Frontend implemented in `frontend/` with:
-  - Next.js (App Router + TypeScript)
-  - Tailwind CSS + shadcn/ui
-  - Monaco editor
-  - Workspace Mode (fullscreen app overlay with file tree + tabs)
-  - Entry-file deploy behavior for multi-file editing (`handler.ts` default)
-  - MSW mock mode behind env toggle (`NEXT_PUBLIC_USE_MOCKS=true`)
+## Canonical Docs
+- `README.md`: runbook
+- `AGENTS.md`: scope + execution rules
+- `PLAN.md`: active checklist
+- `DECISIONS.md`: active decisions/blockers
+- `DECISIONS_ARCHIVE.md`: historical decisions/blockers
 
-## Backend Capabilities
+## Current Stack
+- Frontend: Next.js + TypeScript + Tailwind + shadcn/ui + Monaco + MSW
+- Backend: AWS SAM Lambda (Node.js 22)
+- APIs: `GET /health`, `POST /upload`, `POST /deploy`
+- Deploy target: AWS Lambda Function URL
 
-- Accept user Lambda handler code and deploy it as AWS Lambda (`nodejs22.x`)
-- Create public Lambda Function URL with CORS
-- Add required public Function URL invoke permissions
-- Pass runtime env vars (`OPENAI_API_KEY`, `S3_CONTEXT_FILES`)
-- Upload context files to S3 and return `s3://...` URLs
-- Auto-create execution IAM role (if missing)
-- Auto-create context bucket (if missing)
+## MVP v2 Scope
+1. Full multi-file deploy support in backend + API contract.
+2. System prompt as frontend field, deployed via env var (`SYSTEM_PROMPT`).
+3. Template roadmap signposting in UI with selector:
+   - `Chat Completion` enabled
+   - future templates disabled with `Coming soon`
+   - helper text: `More templates are planned in upcoming releases.`
+4. Intensive real end-to-end testing with real AWS + OpenAI path, then bug fixes.
+
+## Deploy Contract (v2)
+- Required shape uses `files[]` + `entryFile`.
+- Legacy v1 `code` payload is unsupported and should return a clear `400` migration error.
 
 ## Backend Runbook
-
 ```bash
 cd backend
 npm install
@@ -39,56 +43,50 @@ sam build
 sam local start-api
 ```
 
-Deploy backend API:
-
+Deploy backend:
 ```bash
 cd backend
 sam deploy --guided
 ```
 
 ## Frontend Runbook
-
 ```bash
 cd frontend
 npm install
-cat > .env.local <<'EOF'
-NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:3000
-NEXT_PUBLIC_USE_MOCKS=false
-EOF
+cp .env.local.example .env.local
 npm run dev -- --port 3001
 ```
 
-Mock mode (frontend-only, no backend required):
-
+Mock mode:
 ```bash
 cd frontend
-cat > .env.local <<'EOF'
+cat > .env.local <<'EOF2'
 NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:3000
 NEXT_PUBLIC_USE_MOCKS=true
-EOF
+EOF2
 npm run dev -- --port 3001
 ```
 
 ## Environment
-
-`backend/.env.example` documents local variables. Key ones:
-
+Backend (`backend/.env.example`):
 - `AWS_REGION`
 - `DEPLOY_TARGET_REGION`
 - `MVP_LAMBDA_ROLE_ARN` (optional override)
 - `MVP_LAMBDA_ROLE_NAME`
 - `S3_CONTEXT_BUCKET`
 
-## Verification Status (2026-02-15)
+Frontend (`frontend/.env.local.example`):
+- `NEXT_PUBLIC_BACKEND_BASE_URL`
+- `NEXT_PUBLIC_USE_MOCKS`
 
-Backend was re-verified with:
+E2E testing secret (local shell/runtime only):
+- `OPENAI_API_KEY`
 
-- `npm run typecheck` ✅
-- `npm run build` ✅
-- `sam validate --lint` ✅
-- `sam build` ✅
-- `sam local start-api` endpoint smoke tests (`/health`, `/upload`, `/deploy`) ✅
-- Live AWS deploy/invoke/upload tests in `eu-central-1` ✅
+## Security
+- Never commit API keys or cloud credentials.
+- For real E2E testing, inject OpenAI key at runtime only (use local `OPENAI_API_KEY`).
+- Redact secrets from logs and docs.
 
-Operational note:
-- New Function URLs can return transient timeouts right after creation; retrying after a short delay succeeds.
+## Notes
+- Root README is canonical; `frontend/README.md` is intentionally removed.
+- Historical `builder` naming may exist in archived logs/resources; active defaults use `forger` naming.

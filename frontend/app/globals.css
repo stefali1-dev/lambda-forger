@@ -77,37 +77,3 @@
     font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 }
-
-@layer components {
-  .workspace-panel [data-slot="card"] {
-    border-color: oklch(0.32 0.02 253 / 0.9);
-    background-color: oklch(0.22 0.02 253 / 0.92);
-    color: oklch(0.95 0.01 252);
-  }
-
-  .workspace-panel [data-slot="card-description"] {
-    color: oklch(0.78 0.02 252);
-  }
-
-  .workspace-panel [data-slot="input"] {
-    border-color: oklch(0.35 0.02 253 / 0.9);
-    background-color: oklch(0.18 0.015 253 / 0.95);
-    color: oklch(0.95 0.01 252);
-  }
-
-  .workspace-panel [data-slot="alert"] {
-    border-color: oklch(0.32 0.02 253 / 0.9);
-    background-color: oklch(0.2 0.018 253 / 0.92);
-  }
-
-  .workspace-panel [data-slot="button"][data-variant="outline"] {
-    border-color: oklch(0.37 0.03 251 / 0.9);
-    background-color: oklch(0.22 0.02 252 / 0.9);
-    color: oklch(0.95 0.01 252);
-    box-shadow: none;
-  }
-
-  .workspace-panel [data-slot="button"][data-variant="outline"]:hover {
-    background-color: oklch(0.28 0.025 252 / 0.96);
-  }
-}

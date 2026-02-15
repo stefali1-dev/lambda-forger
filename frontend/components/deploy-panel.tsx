@@ -15,6 +15,7 @@ interface DeployPanelProps {
   errorMessage: string | null;
   result: DeployResponse | null;
   onDeploy: () => Promise<void>;
+  workspace?: boolean;
 }
 
 function copyText(value: string, label: string): void {
@@ -30,10 +31,22 @@ export function DeployPanel({
   errorMessage,
   result,
   onDeploy,
+  workspace = false,
 }: DeployPanelProps) {
+  const baseCardClass = workspace
+    ? "border-slate-700 bg-slate-900/90 text-slate-100"
+    : "border-border/70 bg-card/70";
+  const resultCardClass = workspace
+    ? "border-emerald-500/40 bg-emerald-950/20 text-slate-100"
+    : "border-emerald-500/40 bg-emerald-950/5";
+  const mutedTextClass = workspace ? "text-slate-300" : "text-muted-foreground";
+  const codeClass = workspace
+    ? "block flex-1 truncate rounded-md border border-slate-700 bg-slate-950/90 px-2 py-1 text-xs text-slate-100"
+    : "block flex-1 truncate rounded-md border border-border/60 bg-background/80 px-2 py-1 text-xs";
+
   return (
     <div className="space-y-3">
-      <Card className="border-border/70 bg-card/70">
+      <Card className={baseCardClass}>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold">Deploy</CardTitle>
         </CardHeader>
@@ -60,7 +73,7 @@ export function DeployPanel({
       ) : null}
 
       {result ? (
-        <Card className="border-emerald-500/40 bg-emerald-950/5">
+        <Card className={resultCardClass}>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
               <CheckCircle2 className="size-4 text-emerald-500" />
@@ -69,16 +82,16 @@ export function DeployPanel({
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Function Name</p>
+              <p className={`mb-1 text-xs uppercase tracking-wide ${mutedTextClass}`}>Function Name</p>
               <Badge variant="secondary" className="font-mono text-xs">
                 {result.functionName}
               </Badge>
             </div>
 
             <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Function URL</p>
+              <p className={`text-xs uppercase tracking-wide ${mutedTextClass}`}>Function URL</p>
               <div className="flex gap-2">
-                <code className="block flex-1 truncate rounded-md border border-border/60 bg-background/80 px-2 py-1 text-xs">
+                <code className={codeClass}>
                   {result.functionUrl}
                 </code>
                 <Button size="icon-sm" variant="outline" onClick={() => copyText(result.functionUrl, "Function URL")}>
@@ -88,9 +101,15 @@ export function DeployPanel({
             </div>
 
             <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">cURL</p>
+              <p className={`text-xs uppercase tracking-wide ${mutedTextClass}`}>cURL</p>
               <div className="flex gap-2">
-                <code className="block flex-1 overflow-x-auto rounded-md border border-border/60 bg-background/80 px-2 py-1 text-xs">
+                <code
+                  className={
+                    workspace
+                      ? "block flex-1 overflow-x-auto rounded-md border border-slate-700 bg-slate-950/90 px-2 py-1 text-xs text-slate-100"
+                      : "block flex-1 overflow-x-auto rounded-md border border-border/60 bg-background/80 px-2 py-1 text-xs"
+                  }
+                >
                   {result.curlExample}
                 </code>
                 <Button size="icon-sm" variant="outline" onClick={() => copyText(result.curlExample, "cURL command")}>

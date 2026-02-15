@@ -92,7 +92,7 @@ function internalError(message: string): APIGatewayProxyResultV2 {
 }
 
 async function handleHealth(): Promise<APIGatewayProxyResultV2> {
-  return jsonResponse(200, { ok: true, service: 'ai-lambda-builder-backend' });
+  return jsonResponse(200, { ok: true, service: 'ai-lambda-forger-backend' });
 }
 
 async function handleDeploy(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {

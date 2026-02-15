@@ -35,7 +35,7 @@ const ASSUME_ROLE_POLICY = JSON.stringify({
 
 const BASIC_EXEC_POLICY = 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole';
 const S3_READONLY_POLICY = 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess';
-const DEFAULT_EXEC_ROLE_NAME = 'ai-lambda-builder-mvp-role';
+const DEFAULT_EXEC_ROLE_NAME = 'ai-lambda-forger-mvp-role';
 
 export interface DeployPayload {
   code: string;
@@ -117,7 +117,7 @@ async function ensureExecutionRole(iamClient: IAMClient): Promise<string> {
     new CreateRoleCommand({
       RoleName: roleName,
       AssumeRolePolicyDocument: ASSUME_ROLE_POLICY,
-      Description: 'MVP role for AI Lambda Builder deployed functions',
+      Description: 'MVP role for AI Lambda Forger deployed functions',
     }),
   );
 
