@@ -2,7 +2,7 @@
 
 **Time Budget:** 8-10 hours (ship today)  
 **Status:** 🚀 Chat-only MVP scope  
-**Last Updated:** 2026-02-15 17:53 EET
+**Last Updated:** 2026-02-15 17:55 EET
 
 ---
 
@@ -125,19 +125,21 @@ Progress note (2026-02-15): implemented `backend/src/deploy.ts` + wired `POST /d
 ---
 
 #### Task 1.3: Build S3 file upload handler
-- [ ] Create `POST /upload` endpoint
-- [ ] Accept multipart/form-data (use `multer` middleware or manual parsing)
-- [ ] Generate unique folder: `ai-lambda-context-${randomId()}`
-- [ ] Upload files to S3:
+- [x] Create `POST /upload` endpoint
+- [x] Accept multipart/form-data (use `multer` middleware or manual parsing)
+- [x] Generate unique folder: `ai-lambda-context-${randomId()}`
+- [x] Upload files to S3:
   - Bucket: `ai-lambda-mvp` (create manually if doesn't exist)
   - Key: `${folderId}/filename.txt`
-- [ ] Return S3 URLs:
+- [x] Return S3 URLs:
   ```json
   {
     "s3Urls": ["s3://ai-lambda-mvp/context-abc123/file1.txt"]
   }
   ```
 - **Time estimate:** 45 min
+
+Progress note (2026-02-15): implemented `backend/src/s3Upload.ts` and wired `/upload` in `backend/src/server.ts`; manual multipart upload returned S3 URL and object existence verified via `aws s3 ls`.
 
 **Shortcut:** If S3 upload is too slow, skip it for MVP. Hardcode one sample context file in Lambda.
 

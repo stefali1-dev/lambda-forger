@@ -226,6 +226,24 @@
 
 ---
 
+### Decision 12: Backend upload endpoint ensures context bucket exists
+**Date:** 2026-02-15  
+**Context:** `POST /upload` should work even when the target context bucket has not been created manually yet
+
+**Chosen:**
+1. `/upload` first checks bucket existence with `HeadBucket`
+2. If missing, backend creates it using `CreateBucket` in configured region
+
+**Why:**
+- Reduces setup friction for first run
+- Keeps MVP closer to "works out of the box" behavior
+
+**Trade-offs:**
+- Requires bucket-creation permission in caller AWS identity
+- First upload can be slightly slower on fresh setup
+
+---
+
 ## Open Questions / Blockers
 
 ### Blocker 1: IAM Role Creation Strategy
