@@ -90,7 +90,7 @@ ai-lambda-builder/
 - `@aws-sdk/client-iam` (create execution role if needed)
 
 **AWS Resources We Create:**
-- Lambda Function (Node.js 20.x runtime)
+- Lambda Function (Node.js 22.x runtime)
 - Lambda Function URL (public HTTPS endpoint, CORS enabled)
 - S3 Bucket (for user-uploaded context files)
 - IAM Execution Role (for Lambda to access S3)
@@ -116,7 +116,7 @@ ai-lambda-builder/
 - Multi-user / teams
 - Billing / pricing
 - Template marketplace
-- Custom runtimes (only Node.js 20.x)
+- Custom runtimes (only Node.js 22.x)
 - Streaming Chat template (defer to post-MVP)
 - Image Generation template (defer to post-MVP)
 
@@ -128,6 +128,9 @@ ai-lambda-builder/
 - Use `CreateFunctionUrlConfigCommand` to get public HTTPS endpoint
 - **No API Gateway needed** (simplifies MVP)
 - Enable CORS in function URL config
+- For public URLs (`AuthType: NONE`), add resource-policy permissions after URL creation:
+  - `lambda:InvokeFunctionUrl` (with `FunctionUrlAuthType: NONE`)
+  - `lambda:InvokeFunction` (with `InvokedViaFunctionUrl: true`)
 - Research: https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html
 
 **2. Lambda Deployment Package**
@@ -200,7 +203,7 @@ Deferred template files (post-MVP):
 **Response:**
 ```json
 {
-  "functionUrl": "https://abc123.lambda-url.us-east-1.on.aws/",
+  "functionUrl": "https://abc123.lambda-url.eu-central-1.on.aws/",
   "functionName": "ai-lambda-user-abc123",
   "curlExample": "curl -X POST https://... -d '{\"message\":\"Hello\"}'"
 }
@@ -214,9 +217,10 @@ Deferred template files (post-MVP):
 5. Run `npm install` (or use pre-cached node_modules)
 6. Zip directory
 7. Create IAM execution role (if not exists)
-8. Call `CreateFunctionCommand` (runtime: nodejs20.x, handler: handler.handler)
+8. Call `CreateFunctionCommand` (runtime: nodejs22.x, handler: handler.handler)
 9. Call `CreateFunctionUrlConfigCommand` (auth: NONE, CORS: enabled)
-10. Return function URL
+10. Call `AddPermission` for Function URL public invoke (`lambda:InvokeFunctionUrl` + `lambda:InvokeFunction`)
+11. Return function URL
 
 ### `POST /upload`
 **Purpose:** Upload context files to S3
@@ -293,7 +297,7 @@ npm install
 # Create .env file:
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=us-east-1
+AWS_REGION=eu-central-1
 npm run dev  # starts Express server on http://localhost:3001
 ```
 
@@ -326,6 +330,7 @@ npm start  # starts React app on http://localhost:3000
 - Be proactive: propose and, when low-risk, execute additional improvements that increase MVP ship confidence.
 - Communicate clearly and directly: concise status updates, explicit assumptions, concrete next steps.
 - Default behavior: move work forward unless blocked by a true product/architecture decision.
+- Commit regularly after completing meaningful slices, and push to remote to preserve progress.
 
 ---
 

@@ -171,21 +171,66 @@
 
 ---
 
+### Decision 9: IAM execution role creation = automatic
+**Date:** 2026-02-15  
+**Context:** Decide whether deployment should require a pre-created IAM role or create one programmatically
+
+**Chosen:**
+1. Backend creates/updates the Lambda execution role automatically via AWS SDK
+
+**Why:**
+- Better "one-click deploy" UX for frontend-first audience
+- Removes a manual AWS prerequisite from MVP flow
+- Current AWS identity has sufficient permissions, so delivery risk is low
+
+**Trade-offs:**
+- Slightly more backend complexity (role existence checks + policy attach)
+- Must handle IAM eventual consistency (wait/retry before Lambda create)
+
+---
+
+### Decision 10: Default region and context bucket
+**Date:** 2026-02-15  
+**Context:** Align runtime defaults with available account setup and create a dedicated S3 bucket for context files
+
+**Chosen:**
+1. Default AWS region: `eu-central-1`
+2. Dedicated context bucket: `ai-lambda-mvp-873550638583-euc1`
+
+**Why:**
+- Matches currently configured AWS CLI/account region
+- Keeps MVP resources isolated from existing SAM/project buckets
+- Reduces setup friction for local development and manual testing
+
+**Trade-offs:**
+- Public examples/docs now assume Frankfurt region unless overridden
+
+---
+
+### Decision 11: Function URL public invoke requires explicit resource-policy permissions
+**Date:** 2026-02-15  
+**Context:** SPIKE 1 showed `CreateFunctionUrlConfig(AuthType: NONE)` alone returned `403 Forbidden` on invoke
+
+**Chosen:**
+1. After creating Function URL, backend must call `AddPermission` for:
+   - `lambda:InvokeFunctionUrl` with `FunctionUrlAuthType: NONE`
+   - `lambda:InvokeFunction` with `InvokedViaFunctionUrl: true`
+
+**Why:**
+- AWS Function URL auth behavior changed (new URLs created after Oct 2025 require both permissions for public invoke)
+- Without both statements, public URL invocation fails even when URL auth type is `NONE`
+
+**Trade-offs:**
+- Slightly more deployment logic and IAM policy operations
+- Must generate unique statement IDs and handle idempotency on retries
+
+---
+
 ## Open Questions / Blockers
 
 ### Blocker 1: IAM Role Creation Strategy
-**Status:** ⚠️ NEEDS DECISION  
-**Question:** Should we create IAM execution role programmatically or require user to create manually?
-
-**Option A:** Create role via AWS SDK
-- Pros: Fully automated, better UX
-- Cons: Requires IAM permissions, more complex error handling
-
-**Option B:** Require user to create role manually (provide instructions)
-- Pros: Simpler MVP implementation
-- Cons: Extra setup step, worse UX
-
-**Recommendation:** Start with Option B (manual), add Option A post-MVP if needed.
+**Status:** ✅ RESOLVED by Decision 9  
+**Resolution:** Role will be created programmatically by backend deployment flow.
 
 ---
 
@@ -213,6 +258,18 @@
 **Mitigation:**
 - openai package is ~2-3 MB (should be fine)
 - If exceeds: switch to S3 upload method or use esbuild bundling
+
+---
+
+### Blocker 4: SPIKE 1 execution missing IAM role ARN
+**Status:** ✅ RESOLVED  
+**Question:** Which role ARN should be used for the temporary Lambda URL spike run?
+
+**Resolution (2026-02-15):**
+1. Created IAM role `ai-lambda-builder-mvp-role`
+2. Attached `AWSLambdaBasicExecutionRole` and `AmazonS3ReadOnlyAccess`
+3. Set `MVP_LAMBDA_ROLE_ARN` in local backend `.env`
+4. Re-ran spike successfully with HTTP 200 invocation response
 
 ---
 
@@ -253,4 +310,4 @@
 
 ---
 
-**Last Updated:** 2026-02-15 14:48 GMT+2
+**Last Updated:** 2026-02-15

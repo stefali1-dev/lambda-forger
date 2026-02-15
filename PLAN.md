@@ -2,7 +2,7 @@
 
 **Time Budget:** 8-10 hours (ship today)  
 **Status:** 🚀 Chat-only MVP scope  
-**Last Updated:** 2026-02-15 14:50 GMT+2
+**Last Updated:** 2026-02-15 17:53 EET
 
 ---
 
@@ -25,6 +25,7 @@
 - Propose additional high-impact initiatives when they improve ship readiness.
 - Communicate in clear, direct, concise technical language.
 - If a task is blocked, document it in `DECISIONS.md` with options and a recommendation.
+- Commit and push after each completed task slice to avoid losing working progress.
 
 ## 🚀 Runbook First
 
@@ -59,54 +60,60 @@ Execution framing for agents:
 ### **PHASE 1: Backend - AWS Deployment Engine** (~3-4 hours)
 
 #### SPIKE 1: Research AWS Lambda Function URLs ⚠️ **DO THIS FIRST**
-- [ ] Read AWS docs: https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html
-- [ ] Understand: `CreateFunctionCommand` + `CreateFunctionUrlConfigCommand`
-- [ ] Test: Create a "hello world" Lambda programmatically via AWS SDK
-- [ ] Verify: Function URL works (no API Gateway needed)
-- [ ] Check: CORS configuration options
+- [x] Read AWS docs: https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html
+- [x] Understand: `CreateFunctionCommand` + `CreateFunctionUrlConfigCommand`
+- [x] Test: Create a "hello world" Lambda programmatically via AWS SDK
+- [x] Verify: Function URL works (no API Gateway needed)
+- [x] Check: CORS configuration options
 - **Time estimate:** 30 min
+
+Progress note (2026-02-15): added `backend/src/spikes/functionUrlSpike.ts`, validated creation + invocation + cleanup in `eu-central-1`; function URL requires explicit `AddPermission` calls for `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` (invoked-via-url).
 
 **Why this matters:** This determines if the whole MVP is feasible. If Function URLs don't work, we pivot.
 
 ---
 
 #### Task 1.1: Set up backend project
-- [ ] `mkdir -p ~/your-project/backend && cd ~/your-project/backend`
-- [ ] `npm init -y`
-- [ ] Install deps:
+- [x] `mkdir -p ~/your-project/backend && cd ~/your-project/backend`
+- [x] `npm init -y`
+- [x] Install deps:
   ```bash
   npm i express cors aws-sdk @aws-sdk/client-lambda @aws-sdk/client-s3 @aws-sdk/client-iam dotenv archiver
   npm i -D @types/node @types/express typescript ts-node nodemon
   ```
-- [ ] Create `tsconfig.json` (or use `npx tsc --init`)
-- [ ] Create `.env`:
+- [x] Create `tsconfig.json` (or use `npx tsc --init`)
+- [x] Create `.env`:
   ```
   AWS_ACCESS_KEY_ID=your_key
   AWS_SECRET_ACCESS_KEY=your_secret
-  AWS_REGION=us-east-1
+  AWS_REGION=eu-central-1
   PORT=3001
   ```
-- [ ] Create `src/server.ts` basic Express server (hello world endpoint)
-- [ ] Test: `npm run dev` → curl http://localhost:3001 → get response
+- [x] Create `src/server.ts` basic Express server (hello world endpoint)
+- [x] Test: `npm run dev` → curl http://localhost:3001 → get response
 - **Time estimate:** 15 min
+
+Progress note (2026-02-15): dependencies installed, scripts added in `backend/package.json`, and `.env.example` created.
 
 ---
 
 #### Task 1.2: Build Lambda deployment endpoint ⭐ **CORE FEATURE**
-- [ ] Create `POST /deploy` endpoint in `src/server.ts`
-- [ ] Validate request body: `code`, `template: "chatCompletion"`, `openaiKey`, optional `s3ContextFiles`
+- [x] Create `POST /deploy` endpoint in `src/server.ts`
+- [x] Validate request body: `code`, `template: "chatCompletion"`, `openaiKey`, optional `s3ContextFiles`
 - [ ] Implement deploy flow checklist:
-  1. Generate function name (`ai-lambda-${randomId()}`)
-  2. Create temp dir and write `handler.js`
-  3. Write `package.json` with `openai` dependency
-  4. Install prod deps (`npm install --production`) or reuse cached deps
-  5. Zip package
-  6. Resolve IAM role ARN (manual for MVP or SDK-created)
-  7. Create Lambda (`nodejs20.x`, `handler.handler`, timeout `30s`)
-  8. Set env vars (`OPENAI_API_KEY`, `S3_CONTEXT_FILES`)
-  9. Create Function URL (`AuthType: NONE`, CORS enabled)
-  10. Return `functionUrl`, `functionName`, `curlExample`
-- [ ] Match endpoint contract from `AGENTS.md` (`POST /deploy` section)
+  1. [x] Generate function name (`ai-lambda-${randomId()}`)
+  2. [x] Create temp dir and write `handler.js`
+  3. [x] Write `package.json` with `openai` dependency
+  4. [x] Install prod deps (`npm install --production`) or reuse cached deps
+  5. [x] Zip package
+  6. [x] Resolve IAM role ARN (manual for MVP or SDK-created)
+  7. [x] Create Lambda (`nodejs22.x`, `handler.handler`, timeout `30s`)
+  8. [x] Set env vars (`OPENAI_API_KEY`, `S3_CONTEXT_FILES`)
+  9. [x] Create Function URL (`AuthType: NONE`, CORS enabled)
+  10. [x] Return `functionUrl`, `functionName`, `curlExample`
+- [x] Match endpoint contract from `AGENTS.md` (`POST /deploy` section)
+
+Progress note (2026-02-15): implemented `backend/src/deploy.ts` + wired `POST /deploy` in `backend/src/server.ts`; manual deploy test returned URL and successful `200` invocation.
 
 **Shortcuts if stuck:**
 - IAM role: Create manually in AWS console, hardcode ARN in code
