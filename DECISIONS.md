@@ -431,6 +431,31 @@
 
 ---
 
+### Decision 22: Editor scalability path = Workspace Mode overlay (file tree + tabs)
+**Date:** 2026-02-15  
+**Context:** MVP split layout is optimized for quick deploy, but long-term vision needs multi-file authoring and stronger editor focus without sacrificing deploy visibility.
+
+**Chosen:**
+1. Keep default split layout for onboarding speed
+2. Add app-level fullscreen `Workspace Mode` toggle from editor header
+3. In workspace mode, show:
+   - File tree (left)
+   - Editor tabs (top)
+   - Collapsible deploy panel (right)
+4. Keep `Exit Workspace` button always visible and support `Esc` to exit
+5. Deploy contract remains single-file by using designated entry file (`handler.ts` by default)
+
+**Why:**
+- Gives immediate path to larger Lambda editing workflows
+- Avoids high-friction full layout rewrite in MVP mode
+- Preserves easy deploy UX while offering power-user editing surface
+
+**Trade-offs:**
+- Multi-file authoring is currently UI-level only; deployment still targets one entry file
+- Additional UI state complexity (active file, entry file, panel visibility)
+
+---
+
 ## Open Questions / Blockers
 
 ### Blocker 1: IAM Role Creation Strategy
@@ -536,4 +561,4 @@
 
 ---
 
-**Last Updated:** 2026-02-15 20:15 EET
+**Last Updated:** 2026-02-15 21:45 EET

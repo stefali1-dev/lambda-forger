@@ -13,6 +13,8 @@ MVP for deploying context-aware OpenAI AWS Lambda endpoints from a frontend-firs
   - Next.js (App Router + TypeScript)
   - Tailwind CSS + shadcn/ui
   - Monaco editor
+  - Workspace Mode (fullscreen app overlay with file tree + tabs)
+  - Entry-file deploy behavior for multi-file editing (`handler.ts` default)
   - MSW mock mode behind env toggle (`NEXT_PUBLIC_USE_MOCKS=true`)
 
 ## Backend Capabilities
