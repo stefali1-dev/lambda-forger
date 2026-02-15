@@ -107,6 +107,68 @@
 - Function calling (too complex)
 - JSON mode (can add later)
 
+**Status:** Superseded by Decision 7 (chat-only MVP scope)
+
+---
+
+### Decision 6: Agent Operating Mode = Autonomous + Proactive
+**Date:** 2026-02-15 13:30  
+**Context:** Define how AI agents should behave in this repo to maximize delivery speed
+
+**Chosen:**
+1. Agents operate independently and execute tasks end-to-end when requirements are clear
+2. Agents use terminal access directly for implementation and verification
+3. Agents proactively propose and execute low-risk, high-impact improvements
+4. Agents communicate with clear, direct technical updates
+
+**Why:**
+- Reduces coordination overhead
+- Increases delivery speed for same-day MVP target
+- Improves quality by encouraging verification, not just code edits
+
+**Trade-offs:**
+- Higher chance of broader changes; mitigated by writing decisions/blockers in this file
+- Requires disciplined communication and task tracking in `PLAN.md`
+
+---
+
+### Decision 7: Chat-only MVP scope (defer streaming + image)
+**Date:** 2026-02-15 14:25  
+**Context:** Reduce scope risk and ship a reliable MVP faster
+
+**Chosen:**
+1. MVP supports only Chat Completion with S3 context files
+2. Streaming Chat and Image Generation are post-MVP features
+
+**Why:**
+- Shortest path to working end-to-end value
+- Lower integration and debugging complexity
+- Faster validation of core user need (context-aware chat endpoint deployment)
+
+**Trade-offs:**
+- Narrower initial demo surface
+- Streaming and image use cases delayed to v2
+
+---
+
+### Decision 8: Product Positioning = Frontend-first chatbot endpoint
+**Date:** 2026-02-15 14:40  
+**Context:** Clarify go-to-market framing so product and UX decisions stay consistent
+
+**Chosen positioning:**
+1. Audience: frontend developers
+2. Promise: "From static site to context-aware chatbot endpoint in minutes"
+3. Value framing: upload context files + deploy API endpoint without backend/AWS complexity
+
+**Why:**
+- Aligns tightly with current chat-only MVP capabilities
+- Speaks directly to a concrete pain point and user persona
+- Improves clarity for copy, onboarding, and feature prioritization
+
+**Trade-offs:**
+- Narrower initial audience positioning
+- Less emphasis on broader "AI Lambda builder" use cases until later versions
+
 ---
 
 ## Open Questions / Blockers
@@ -128,7 +190,7 @@
 ---
 
 ### Blocker 2: Streaming Response Implementation
-**Status:** ⚠️ NEEDS RESEARCH  
+**Status:** 🕒 DEFERRED (Post-MVP)  
 **Question:** Do Lambda Function URLs support response streaming natively?
 
 **To research:**
@@ -136,7 +198,7 @@
 - CreateFunctionCommand config for streaming
 - Alternative: Return SSE-formatted response in body (hack)
 
-**Next steps:** Run SPIKE 1 to validate streaming support.
+**Next steps:** Revisit after chat-only MVP is shipped.
 
 ---
 
@@ -184,11 +246,11 @@
 
 **When you hit a blocker:**
 1. Add to "Open Questions" section
-2. Mark status (⚠️ needs decision, 🔍 needs research, 📊 monitor)
+2. Mark status (⚠️ needs decision, 🔍 needs research, 🕒 deferred, 📊 monitor)
 3. List next steps to unblock
 
 **Update this file as you work** — it's your architectural memory.
 
 ---
 
-**Last Updated:** 2026-02-15 13:12 GMT+2
+**Last Updated:** 2026-02-15 14:48 GMT+2

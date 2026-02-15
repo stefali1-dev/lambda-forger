@@ -1,8 +1,8 @@
 # PLAN.md - AI Lambda Builder MVP
 
 **Time Budget:** 8-10 hours (ship today)  
-**Status:** 🚀 Ready to build  
-**Last Updated:** 2026-02-15 13:21 GMT+2
+**Status:** 🚀 Chat-only MVP scope  
+**Last Updated:** 2026-02-15 14:50 GMT+2
 
 ---
 
@@ -19,19 +19,38 @@
 
 **Update this file as you go:** Check off tasks, reorder if needed, add notes.
 
+### Agent Execution Expectations (Mandatory)
+- Work independently and choose the next best action without waiting for micromanagement.
+- Use full terminal access proactively to inspect, implement, and verify.
+- Propose additional high-impact initiatives when they improve ship readiness.
+- Communicate in clear, direct, concise technical language.
+- If a task is blocked, document it in `DECISIONS.md` with options and a recommendation.
+
+## 🚀 Runbook First
+
+```bash
+# Terminal 1
+cd backend
+npm install
+npm run dev
+
+# Terminal 2
+cd frontend
+npm install && npm start
+```
+
 ---
 
 ## 🎯 Goal
 
-Build a web app where users can:
-1. Select an AI Lambda template (Chat Completion, Streaming Chat, Image Generation)
-2. Edit TypeScript code in a browser editor (Monaco)
-3. Upload context files (for Chat Completion)
-4. Enter OpenAI API key
-5. Click "Deploy" → AWS Lambda created → Get public URL
-6. Call the URL → Get AI-powered response
+Goal and scope are canonical in `AGENTS.md` under:
+- `🧲 Product Positioning (Canonical)`
+- `🎯 MVP Scope (What's IN / What's OUT)`
+- `🎯 Success Criteria`
 
-**Success = This works end-to-end.** Everything else is optional.
+Execution framing for agents:
+- Prioritize tasks that reduce time-to-first-chatbot for frontend developers.
+- For UX/copy choices, prefer wording that highlights "context-aware chatbot endpoint in minutes."
 
 ---
 
@@ -75,41 +94,19 @@ Build a web app where users can:
 
 #### Task 1.2: Build Lambda deployment endpoint ⭐ **CORE FEATURE**
 - [ ] Create `POST /deploy` endpoint in `src/server.ts`
-- [ ] Accept request body:
-  ```json
-  {
-    "code": "string (user's Lambda code)",
-    "template": "chatCompletion | streamingChat | imageGeneration",
-    "openaiKey": "sk-...",
-    "s3ContextFiles": ["s3://bucket/file1.txt"] // optional
-  }
-  ```
-
-**Implementation steps:**
-1. [ ] Generate unique function name: `ai-lambda-${randomId()}`
-2. [ ] Create temp directory: `/tmp/${functionName}/`
-3. [ ] Write user code to `handler.js` in temp dir
-4. [ ] Create `package.json` with `openai` dependency
-5. [ ] Run `npm install --production` in temp dir (or copy pre-cached node_modules)
-6. [ ] Zip the directory (use `archiver` package)
-7. [ ] Create/get IAM execution role (hardcode role ARN for MVP, or create programmatically)
-8. [ ] Call `CreateFunctionCommand`:
-   - Runtime: `nodejs20.x`
-   - Handler: `handler.handler`
-   - Timeout: 30 seconds
-   - Environment: `{ OPENAI_API_KEY: openaiKey, S3_CONTEXT_FILES: s3Files.join(',') }`
-   - Role: IAM execution role ARN
-9. [ ] Call `CreateFunctionUrlConfigCommand`:
-   - Auth: `NONE` (public)
-   - CORS: `{ AllowOrigins: ['*'], AllowMethods: ['POST', 'GET'], AllowHeaders: ['Content-Type'] }`
-10. [ ] Return response:
-    ```json
-    {
-      "functionUrl": "https://abc123.lambda-url.us-east-1.on.aws/",
-      "functionName": "ai-lambda-abc123",
-      "curlExample": "curl -X POST https://... -H 'Content-Type: application/json' -d '{\"message\":\"Hello\"}'"
-    }
-    ```
+- [ ] Validate request body: `code`, `template: "chatCompletion"`, `openaiKey`, optional `s3ContextFiles`
+- [ ] Implement deploy flow checklist:
+  1. Generate function name (`ai-lambda-${randomId()}`)
+  2. Create temp dir and write `handler.js`
+  3. Write `package.json` with `openai` dependency
+  4. Install prod deps (`npm install --production`) or reuse cached deps
+  5. Zip package
+  6. Resolve IAM role ARN (manual for MVP or SDK-created)
+  7. Create Lambda (`nodejs20.x`, `handler.handler`, timeout `30s`)
+  8. Set env vars (`OPENAI_API_KEY`, `S3_CONTEXT_FILES`)
+  9. Create Function URL (`AuthType: NONE`, CORS enabled)
+  10. Return `functionUrl`, `functionName`, `curlExample`
+- [ ] Match endpoint contract from `AGENTS.md` (`POST /deploy` section)
 
 **Shortcuts if stuck:**
 - IAM role: Create manually in AWS console, hardcode ARN in code
@@ -187,153 +184,26 @@ Build a web app where users can:
 
 ---
 
-#### Task 2.3: Build template selector
-- [ ] Create `src/components/TemplateSelector.tsx`
-- [ ] Dropdown with options:
-  - "Chat Completion with Context"
-  - "Streaming Chat"
-  - "Image Generation"
-- [ ] On change → call `onSelectTemplate(templateName)`
+#### Task 2.3: Chat-only template wiring
+- [ ] Set default editor content to Chat Completion template on app load
+- [ ] Remove selector dependency for MVP path (or hide it behind a feature flag)
+- [ ] Show small UI label: "MVP: Chat Completion with Context"
 - **Time estimate:** 15 min
 
 ---
 
 #### Task 2.4: Create Lambda templates ⭐ **IMPORTANT**
-Create 3 files in `src/templates/`:
+Create files:
+- [ ] `frontend/src/templates/chatCompletion.ts`
+- [ ] `frontend/src/templates/index.ts` exports chat template
 
-**File: `chatCompletion.ts`**
-```typescript
-export const chatCompletionTemplate = `
-import OpenAI from 'openai';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-
-export const handler = async (event) => {
-  try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    
-    // Read context files from S3 (if provided)
-    const s3 = new S3Client({ region: 'us-east-1' });
-    const contextFilesUrls = (process.env.S3_CONTEXT_FILES || '').split(',').filter(Boolean);
-    
-    const contextFiles = await Promise.all(
-      contextFilesUrls.map(async (url) => {
-        const match = url.match(/s3:\\/\\/([^\\/]+)\\/(.+)/);
-        if (!match) return '';
-        const [, bucket, key] = match;
-        const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-        const response = await s3.send(command);
-        return response.Body.transformToString();
-      })
-    );
-    
-    const context = contextFiles.join('\\\\n\\\\n');
-    
-    const body = JSON.parse(event.body || '{}');
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        { role: 'system', content: context || 'You are a helpful assistant.' },
-        { role: 'user', content: body.message || 'Hello' }
-      ]
-    });
-    
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        response: completion.choices[0].message.content 
-      })
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
-  }
-};
-`;
-```
-
-**File: `streamingChat.ts`**
-```typescript
-export const streamingChatTemplate = `
-import OpenAI from 'openai';
-
-export const handler = async (event) => {
-  // Note: Lambda Function URLs support streaming as of 2024
-  // If streaming doesn't work, return SSE-formatted response in body
-  
-  try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const body = JSON.parse(event.body || '{}');
-    
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: body.message || 'Hello' }],
-      stream: true
-    });
-    
-    // Simplified: Return full response (streaming via Function URL is complex for MVP)
-    let fullResponse = '';
-    for await (const chunk of stream) {
-      fullResponse += chunk.choices[0]?.delta?.content || '';
-    }
-    
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response: fullResponse })
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
-  }
-};
-`;
-```
-
-**File: `imageGeneration.ts`**
-```typescript
-export const imageGenerationTemplate = `
-import OpenAI from 'openai';
-
-export const handler = async (event) => {
-  try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const body = JSON.parse(event.body || '{}');
-    
-    const image = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: body.prompt || 'A cat wearing a space suit',
-      n: 1,
-      size: '1024x1024'
-    });
-    
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        imageUrl: image.data[0].url 
-      })
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
-  }
-};
-`;
-```
-
-**Also create:** `src/templates/index.ts` to export all templates:
-```typescript
-export { chatCompletionTemplate } from './chatCompletion';
-export { streamingChatTemplate } from './streamingChat';
-export { imageGenerationTemplate } from './imageGeneration';
-```
+Template requirements checklist:
+- [ ] Chat template is a string containing a Lambda handler
+- [ ] Parse `event.body` safely (`{}` fallback)
+- [ ] Return JSON `{ statusCode, headers, body }`
+- [ ] Use `process.env.OPENAI_API_KEY`
+- [ ] `chatCompletion`: optionally read `process.env.S3_CONTEXT_FILES` and include context in system prompt
+- [ ] Catch errors and return status `500` with user-readable error message
 
 - **Time estimate:** 45 min
 
@@ -346,7 +216,7 @@ export { imageGenerationTemplate } from './imageGeneration';
 - [ ] Drag-and-drop or file input
 - [ ] On file select → call backend `/upload` → store returned S3 URLs
 - [ ] Show uploaded file names below input
-- [ ] Only show this component when "Chat Completion" template is selected
+- [ ] Show this component in MVP flow (chat-only mode)
 - **Time estimate:** 30 min
 
 **Shortcut:** Skip drag-and-drop, just use `<input type="file" />`.
@@ -370,9 +240,9 @@ export { imageGenerationTemplate } from './imageGeneration';
 #### Task 2.7: Build UI layout
 - [ ] Wire everything in `src/App.tsx`:
   - Header: "AI Lambda Builder"
-  - Template selector dropdown
+  - Chat-only MVP label ("Chat Completion with Context")
   - OpenAI API key input (text input, type="password")
-  - File upload component (conditional, only for Chat Completion)
+  - File upload component
   - Monaco editor (60% height)
   - Deploy button
   - Result section (function URL + curl example, only shown after deploy)
@@ -383,11 +253,10 @@ export { imageGenerationTemplate } from './imageGeneration';
 ---
 
 #### Task 2.8: Wire everything together ⭐ **INTEGRATION**
-- [ ] Connect template selector → load template code → editor
 - [ ] Connect editor onChange → save code to state
 - [ ] Connect deploy button → backend API call
 - [ ] Test full flow:
-  1. Select "Chat Completion"
+  1. Chat template is loaded by default
   2. Upload a .txt file
   3. Enter OpenAI API key
   4. Click deploy
@@ -400,12 +269,10 @@ export { imageGenerationTemplate } from './imageGeneration';
 ### **PHASE 3: Testing & Polish** (~1-2 hours)
 
 #### Task 3.1: End-to-end test
-- [ ] Test all 3 templates (or at least 1-2 if time is tight)
+- [ ] Test chat template end-to-end
 - [ ] Verify deployed Lambdas work
 - [ ] Fix bugs
 - **Time estimate:** 45 min
-
-**If tight on time:** Ship with just 1 working template. Can add others later.
 
 ---
 
@@ -428,6 +295,7 @@ export { imageGenerationTemplate } from './imageGeneration';
 
 #### Task 3.4: Write README
 - [ ] Project description
+- [ ] Include positioning language for frontend developers (chatbot endpoint without backend/AWS complexity)
 - [ ] Setup instructions (AWS credentials, npm install)
 - [ ] Screenshots or demo video (optional)
 - [ ] Use cases
@@ -437,44 +305,8 @@ export { imageGenerationTemplate } from './imageGeneration';
 
 ## 🚨 CRITICAL SPIKES (Research Before Building)
 
-### SPIKE 1: AWS Lambda Function URLs (DO THIS FIRST) ⚠️
-**Question:** Can we create public Lambda endpoints without API Gateway?
-
-**Research:**
-- AWS docs: https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html
-- How to: `CreateFunctionUrlConfigCommand` in AWS SDK v3
-- CORS configuration options
-- Does streaming response work?
-
-**Why critical:** If this doesn't work, we need API Gateway (adds complexity).
-
-**Time:** 15 min
-
----
-
-### SPIKE 2: Lambda Deployment Package
-**Question:** How to zip Lambda code + node_modules efficiently?
-
-**Research:**
-- Use `archiver` npm package: https://www.npmjs.com/package/archiver
-- Alternative: `child_process.exec('zip -r ...')`
-- Can we pre-zip openai package and copy it?
-
-**Time:** 20 min
-
----
-
-### SPIKE 3: IAM Role for Lambda
-**Question:** Can we create IAM execution role programmatically, or require manual setup?
-
-**Options:**
-1. Create role via `@aws-sdk/client-iam` (complex)
-2. Hardcode existing role ARN (simple, requires user setup)
-3. Use AWS-managed role (if exists)
-
-**Recommendation:** Start with option 2 (hardcode ARN). Can automate later.
-
-**Time:** 15 min
+Spike tasks are defined in **PHASE 1** above (SPIKE 1 first, then backend critical path).
+Use `DECISIONS.md` to log outcomes, trade-offs, and any pivots.
 
 ---
 
@@ -497,23 +329,8 @@ Task 1.2 + Task 2.8 → Task 3.1 (E2E test)
 
 ## 🎯 SUCCESS CRITERIA
 
-**We're DONE when this works:**
-
-1. ✅ User selects "Chat Completion" template
-2. ✅ User uploads a .txt file (e.g., "Product: We make AI tools. Features: Easy to use, fast, secure.")
-3. ✅ User enters their OpenAI API key
-4. ✅ User clicks "Deploy"
-5. ✅ Backend creates Lambda + uploads file to S3
-6. ✅ User gets function URL
-7. ✅ User runs:
-   ```bash
-   curl -X POST https://abc123.lambda-url.us-east-1.on.aws/ \
-     -H 'Content-Type: application/json' \
-     -d '{"message": "What product do you offer?"}'
-   ```
-8. ✅ Gets response: `{"response": "We offer AI tools that are easy to use, fast, and secure."}`
-
-**If that works → SHIP IT.** Everything else is bonus.
+Canonical Definition of Done lives in `AGENTS.md` (`🎯 Success Criteria`).
+This plan is complete when all DoD checks pass in a manual end-to-end run.
 
 ---
 
@@ -521,7 +338,7 @@ Task 1.2 + Task 2.8 → Task 3.1 (E2E test)
 
 1. **Timebox ruthlessly:** If stuck >30 min → simplify or ask for help
 2. **Cut scope aggressively:** 
-   - Streaming chat too hard? Skip it.
+   - Keep scope chat-only for MVP.
    - S3 upload buggy? Hardcode one file.
    - Ugly UI? Fine, it's an MVP.
 3. **Test incrementally:** After each task → manual test
@@ -563,9 +380,8 @@ Task 1.2 + Task 2.8 → Task 3.1 (E2E test)
 - Things that didn't work (so you don't repeat them)
 - Shortcuts you discovered
 - Blockers you hit (and how you solved them)
+- Post-MVP ideas (streaming, image generation)
 
 ---
 
-**Last Updated:** 2026-02-15 13:21 GMT+2  
-**Status:** 🚀 Ready to build  
 **Next:** Do SPIKE 1, then start Task 1.1

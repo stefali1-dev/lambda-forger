@@ -8,15 +8,23 @@
 
 ## 🎯 What We're Building
 
-A web app where users can:
-1. Select an AI Lambda template (Chat Completion, Streaming Chat, Image Generation)
-2. Edit TypeScript code in a VS Code-style browser editor
-3. Upload context files (for Chat Completion template)
-4. Enter their OpenAI API key
-5. Click "Deploy" → Backend creates AWS Lambda + S3 upload → Returns public function URL
-6. User gets a working AI endpoint they can call immediately
+A web app where users can build and deploy OpenAI-powered AWS Lambda endpoints in one click.
 
 **Core value:** "Write an OpenAI Lambda function → Deploy to AWS in one click"
+
+## 🧲 Product Positioning (Canonical)
+
+**Primary audience:** Frontend developers who need chatbot capability without backend/AWS setup work.
+
+**Primary promise:** "From static site to context-aware chatbot endpoint in minutes."
+
+**Selling point:** Frontend teams can upload context files, paste an OpenAI key, deploy, and call a working chatbot API from any frontend.
+
+**Messaging guardrails for agents:**
+- Emphasize "no backend/AWS complexity" and "fast time to value."
+- Prefer "context-aware chatbot API" over generic "AI app builder."
+- Keep copy practical and developer-first (endpoint, curl, integration).
+- Do not position streaming/image as current MVP capability.
 
 ---
 
@@ -29,6 +37,11 @@ See `PLAN.md` for the complete TODO list, spikes, and task breakdown.
 - ✅ Update `PLAN.md` as you complete tasks (check off `[ ]` items)
 - ✅ Update this file (`AGENTS.md`) if you discover important context
 - ✅ Log blockers/decisions in `DECISIONS.md` (create if needed)
+
+**Source of truth by file:**
+- `AGENTS.md`: constraints, architecture context, operating rules
+- `PLAN.md`: execution checklist, ordering, progress tracking
+- `DECISIONS.md`: decisions, trade-offs, blockers, and recommendations
 
 ---
 
@@ -43,13 +56,13 @@ ai-lambda-builder/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── Editor.tsx          # Monaco editor wrapper
-│   │   │   ├── TemplateSelector.tsx
+│   │   │   ├── TemplateSelector.tsx # optional/post-MVP
 │   │   │   ├── FileUpload.tsx
 │   │   │   └── DeployButton.tsx
 │   │   ├── templates/              # Lambda code templates (as strings)
 │   │   │   ├── chatCompletion.ts
-│   │   │   ├── streamingChat.ts
-│   │   │   └── imageGeneration.ts
+│   │   │   ├── streamingChat.ts    # post-MVP
+│   │   │   └── imageGeneration.ts  # post-MVP
 │   │   └── App.tsx
 │   └── package.json
 ├── backend/             # Node.js + Express API
@@ -87,7 +100,7 @@ ai-lambda-builder/
 ## 🎯 MVP Scope (What's IN / What's OUT)
 
 ### ✅ IN SCOPE (Must Have)
-- 3 Lambda templates: Chat Completion, Streaming Chat, Image Generation
+- 1 Lambda template: Chat Completion with Context
 - VS Code editor in browser (Monaco)
 - File upload (for Chat Completion context files)
 - OpenAI API key input (user provides their own key)
@@ -104,6 +117,8 @@ ai-lambda-builder/
 - Billing / pricing
 - Template marketplace
 - Custom runtimes (only Node.js 20.x)
+- Streaming Chat template (defer to post-MVP)
+- Image Generation template (defer to post-MVP)
 
 ---
 
@@ -126,10 +141,10 @@ ai-lambda-builder/
 - Minimum permissions: `AWSLambdaBasicExecutionRole` + S3 read (if using context files)
 - **Decision needed:** Create role programmatically OR require user to create manually?
 
-**4. Streaming Response (Streaming Chat Template)**
+**4. Future feature: Streaming Response (post-MVP)**
 - Lambda Function URLs support response streaming (as of 2024)
 - Requires `Invoke mode: RESPONSE_STREAM` in function config
-- Research: https://aws.amazon.com/blogs/compute/introducing-aws-lambda-response-streaming/
+- Defer implementation until chat-only MVP is shipped
 
 **5. S3 File Upload**
 - Store user context files in S3: `ai-lambda-context-{randomId}/file.txt`
@@ -140,42 +155,11 @@ ai-lambda-builder/
 
 ## 🧠 Key Architectural Decisions
 
-### **Decision 1: How to Bundle Lambda Code?**
-
-**Options:**
-1. **Zip user code + full `node_modules`** (simple, but large zip)
-2. **Use esbuild to bundle** (faster, smaller, but adds complexity)
-3. **Use Lambda Layers for dependencies** (cleaner, but MVP overkill)
-
-**Recommendation for MVP:** Option 1 (zip with node_modules). We can optimize later.
-
-**Implementation:**
-```typescript
-// backend/src/deploy.ts
-import archiver from 'archiver';
-import fs from 'fs';
-
-// 1. Write user code to temp file (handler.js)
-// 2. Create package.json with "openai" dependency
-// 3. Run `npm install` in temp dir
-// 4. Zip temp dir → upload to Lambda
-```
-
-### **Decision 2: Where to Store User Context Files?**
-
-**Option 1:** S3 (persistent, user can reuse)  
-**Option 2:** Lambda /tmp (ephemeral, lost after execution)
-
-**Choice:** S3 (allows multi-invocation context, better UX)
-
-### **Decision 3: How to Handle OpenAI API Key?**
-
-**Options:**
-1. User enters key in UI → passed as Lambda env var (CHOSEN for MVP)
-2. User creates AWS Secrets Manager secret → Lambda reads it
-3. We store keys in our backend DB (requires auth, out of scope)
-
-**Choice:** Option 1 (simplest, no secrets management needed)
+Canonical decisions live in `DECISIONS.md`. Current MVP decisions:
+- Bundle strategy: zip user code + `node_modules` (no esbuild for MVP)
+- Context storage: S3 (not Lambda `/tmp`)
+- OpenAI key handling: user-provided key passed as Lambda env var
+- Agent mode: autonomous, proactive, clear/direct communication
 
 ---
 
@@ -183,49 +167,13 @@ import fs from 'fs';
 
 Each template is a **self-contained Lambda handler** (TypeScript/JavaScript code as a string).
 
-**Example: Chat Completion Template**
+Templates should live in:
+- `frontend/src/templates/chatCompletion.ts`
+- `frontend/src/templates/index.ts`
 
-```typescript
-// templates/chatCompletion.ts
-export const chatCompletionTemplate = `
-import OpenAI from 'openai';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-
-export const handler = async (event) => {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  
-  // Read context files from S3 (env var S3_CONTEXT_FILES = "s3://bucket/file1.txt,s3://bucket/file2.txt")
-  const s3 = new S3Client({ region: 'us-east-1' });
-  const contextFilesUrls = (process.env.S3_CONTEXT_FILES || '').split(',');
-  
-  const contextFiles = await Promise.all(
-    contextFilesUrls.map(async (url) => {
-      const [bucket, key] = url.replace('s3://', '').split('/');
-      const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-      const response = await s3.send(command);
-      return response.Body.transformToString();
-    })
-  );
-  
-  const context = contextFiles.join('\\\\n\\\\n');
-  
-  const body = JSON.parse(event.body);
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4',
-    messages: [
-      { role: 'system', content: context },
-      { role: 'user', content: body.message }
-    ]
-  });
-  
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ response: completion.choices[0].message.content })
-  };
-};
-`;
-```
+Deferred template files (post-MVP):
+- `frontend/src/templates/streamingChat.ts`
+- `frontend/src/templates/imageGeneration.ts`
 
 **Key points:**
 - OpenAI API key passed as `process.env.OPENAI_API_KEY`
@@ -243,7 +191,7 @@ export const handler = async (event) => {
 ```json
 {
   "code": "export const handler = async (event) => { ... }",
-  "template": "chatCompletion" | "streamingChat" | "imageGeneration",
+  "template": "chatCompletion",
   "openaiKey": "sk-...",
   "s3ContextFiles": ["s3://bucket/file1.txt"] // optional, only for chatCompletion
 }
@@ -324,7 +272,7 @@ export const handler = async (event) => {
 ## 🧪 Testing Strategy
 
 **Manual Testing (Priority for MVP):**
-1. **Template Selection:** Select each template → verify code loads in editor
+1. **Template Load:** Chat Completion template loads in editor
 2. **File Upload:** Upload a .txt file → verify S3 upload succeeds
 3. **Deploy:** Click deploy → verify Lambda created in AWS console
 4. **Invoke:** Curl the function URL → verify OpenAI response
@@ -371,6 +319,16 @@ npm start  # starts React app on http://localhost:3000
 
 ---
 
+## 🧭 Agent Operating Principles (Mandatory)
+
+- Operate independently: do not wait for step-by-step instructions when the next action is clear.
+- Act autonomously in the terminal: run commands, inspect code, implement, and validate changes end-to-end.
+- Be proactive: propose and, when low-risk, execute additional improvements that increase MVP ship confidence.
+- Communicate clearly and directly: concise status updates, explicit assumptions, concrete next steps.
+- Default behavior: move work forward unless blocked by a true product/architecture decision.
+
+---
+
 ## 🤖 Instructions for AI Agents
 
 **When starting a task:**
@@ -397,15 +355,8 @@ npm start  # starts React app on http://localhost:3000
 
 ## ⚠️ Blockers / Open Questions
 
-**Track blockers here as you encounter them:**
-
-- [ ] **Blocker 1:** IAM role creation — should we create programmatically or require user to create manually?
-  - **Decision:** TBD (document in DECISIONS.md when resolved)
-
-- [ ] **Blocker 2:** Lambda dependency bundling — archiver vs esbuild?
-  - **Decision:** TBD
-
-*(Add more as you go)*
+Track blockers in `DECISIONS.md` under **Open Questions / Blockers**.
+Add new blockers there (with status, options, and recommendation).
 
 ---
 
@@ -421,18 +372,21 @@ npm start  # starts React app on http://localhost:3000
 
 ## 🎯 Success Criteria
 
-**We're DONE when:**
-1. User can select "Chat Completion" template
-2. User can upload a .txt file (context)
-3. User enters OpenAI API key
-4. User clicks "Deploy"
-5. Backend creates Lambda + uploads file to S3
-6. User gets function URL
-7. User curls the URL with `{"message": "Hello"}` → gets AI response that references uploaded context
+Use this as the canonical Definition of Done:
+
+| Check | Must Pass |
+|---|---|
+| Template load | Chat Completion template is loaded by default in the editor |
+| Context upload | User can upload a `.txt` file and receive S3 URL(s) |
+| OpenAI key input | User can provide key in UI and deploy request includes it |
+| Deploy action | Clicking Deploy creates Lambda + Function URL |
+| Context wiring | Deployed function receives `S3_CONTEXT_FILES` env var when applicable |
+| Invocation | `curl -X POST <functionUrl> -d '{"message":"Hello"}'` returns model response |
+| Error handling | Missing key / deploy failure surfaces clear user-facing error |
 
 **If that works → ship it.** Everything else is bonus.
 
 ---
 
-**Last Updated:** 2026-02-15 13:05 GMT+2  
-**Status:** Ready to build. Start with SPIKE 1 in PLAN.md.
+**Last Updated:** 2026-02-15 14:48 GMT+2  
+**Status:** Chat-only MVP active. Start with SPIKE 1 in PLAN.md.
